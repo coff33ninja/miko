@@ -56,7 +56,7 @@ class WebSocketAnimationClient {
     getWebSocketUrl() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
-        const port = parseInt(window.location.port) + 1000; // WebSocket port is HTTP port + 1000
+        const port = 8765; // WebSocket port is HTTP port + 1000
         return `${protocol}//${host}:${port}`;
     }
     
