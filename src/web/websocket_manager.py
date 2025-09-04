@@ -281,7 +281,9 @@ class WebSocketAnimationManager:
             return False
 
         try:
-            message = json.dumps(data)
+            # Import custom encoder here to avoid circular imports
+            from .json_encoder import WebSocketJSONEncoder
+            message = json.dumps(data, cls=WebSocketJSONEncoder)
             await self.clients[client_id].send(message)
             return True
 
@@ -455,7 +457,7 @@ class WebSocketAnimationManager:
                         "timestamp": time.time(),
                         "queue_length": len(self.animation_queue),
                         "current_animation": (
-                            self.current_animation.event_type.value
+                            asdict(self.current_animation)
                             if self.current_animation
                             else None
                         ),
