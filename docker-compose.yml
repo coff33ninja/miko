@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  anime-ai-character:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: anime-ai-character
+    ports:
+      - "5000:5000"
+      - "6000:6000"
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+      - ./static:/app/static
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - anime-ai-network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    container_name: anime-ai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - anime-ai-network
+    command: redis-server --appendonly yes
+
+  # Optional: Ollama service for local AI
+  ollama:
+    image: ollama/ollama:latest
+    container_name: anime-ai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - anime-ai-network
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    profiles:
+      - ollama
+
+networks:
+  anime-ai-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local
+  ollama_data:
+    driver: local

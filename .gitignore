@@ -1,0 +1,128 @@
+# Kiro IDE files
+.kiro/
+
+# Environment and secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Package managers
+.uv/
+uv.lock
+pip-wheel-metadata/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+.emacs.d/
+
+# Logs and monitoring
+logs/
+*.log
+*.log.*
+log/
+
+# Live2D models and assets (add your own)
+static/models/*.moc3
+static/models/textures/
+static/models/*.json
+static/models/*.png
+static/models/*.jpg
+static/models/*.jpeg
+static/models/*.gif
+static/models/*.webp
+
+# Test coverage and testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.temp/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Deployment and production
+.env.production
+.env.staging
+deployment/secrets/
+k8s/secrets/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Runtime files
+*.pid
+*.sock
+
+# Memory dumps
+*.hprof
+*.dump
+
+# Application specific
+mem0_data/
+livekit_data/
+ollama_models/
