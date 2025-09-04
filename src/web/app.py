@@ -21,11 +21,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 from livekit import api
 
 from config.settings import get_settings
-from web.websocket_manager import (
-    get_websocket_manager,
-    AnimationEvent,
-    AnimationEventType,
-)
+from web.websocket_manager import get_websocket_manager
 from web.animation_sync import get_animation_synchronizer, AnimationPriority
 from error_handling.exceptions import (
     Live2DError,
@@ -92,7 +88,9 @@ class Live2DFlaskApp:
             try:
                 # Validate and parse request data
                 data = request.get_json(force=True, silent=True)
+                logger.info(f"Received animation request data: {data}")
                 if data is None:
+                    logger.warning("Animation request failed: No JSON data provided")
                     raise ValidationError("No JSON data provided")
 
                 expression = data.get("expression")
@@ -102,7 +100,14 @@ class Live2DFlaskApp:
                 sync_with_audio = data.get("sync_with_audio", False)
 
                 if not all([expression, intensity, duration, priority]):
-                    raise ValidationError("Missing required animation parameters")
+                    missing_params = []
+                    if not expression: missing_params.append("expression")
+                    if not intensity: missing_params.append("intensity") 
+                    if not duration: missing_params.append("duration")
+                    if not priority: missing_params.append("priority")
+                    error_msg = f"Missing required animation parameters: {', '.join(missing_params)}"
+                    logger.warning(f"Animation request validation failed: {error_msg}. Received data: {data}")
+                    raise ValidationError(error_msg)
 
                 # Ensure correct types
                 try:
@@ -113,11 +118,41 @@ class Live2DFlaskApp:
                     raise ValidationError(f"Invalid parameter type or value: {e}")
 
                 # Execute animation with fallback
-                result = asyncio.run(
-                    self._execute_animation_with_fallback(
-                        expression, intensity, duration, priority, sync_with_audio
-                    )
-                )
+                try:
+                    # Try to get existing event loop, create new one if none exists
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # If loop is running, we need to use run_coroutine_threadsafe
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(
+                                    asyncio.run,
+                                    self._execute_animation_with_fallback(
+                                        expression, intensity, duration, priority, sync_with_audio
+                                    )
+                                )
+                                result = future.result(timeout=10.0)
+                        else:
+                            result = loop.run_until_complete(
+                                self._execute_animation_with_fallback(
+                                    expression, intensity, duration, priority, sync_with_audio
+                                )
+                            )
+                    except RuntimeError:
+                        # No event loop exists, create one
+                        result = asyncio.run(
+                            self._execute_animation_with_fallback(
+                                expression, intensity, duration, priority, sync_with_audio
+                            )
+                        )
+                except Exception as async_error:
+                    logger.error(f"Async execution error: {async_error}")
+                    result = {
+                        "success": False,
+                        "error": f"Animation execution failed: {str(async_error)}",
+                        "fallback_used": True
+                    }
 
                 if result["success"]:
                     self.consecutive_failures = 0
@@ -226,39 +261,41 @@ class Live2DFlaskApp:
                     "animation": self.current_animation,
                 }
 
-        async def _handle_animation_fallback(
-            self, expression: str, intensity: float, original_error: Exception
-        ) -> Dict[str, Any]:
-            """Handle animation fallback when WebSocket fails."""
-            try:
-                # Log fallback usage
-                self.error_logger.log_fallback_usage(
-                    component="live2d_animation",
-                    fallback_strategy="static_fallback",
-                    original_error=original_error,
-                    fallback_success=True,
-                )
+    async def _handle_animation_fallback(
+        self, expression: str, intensity: float, original_error: Exception
+    ) -> Dict[str, Any]:
+        """Handle animation fallback when WebSocket fails."""
+        try:
+            # Log fallback usage
+            self.error_logger.log_fallback_usage(
+                component="live2d_animation",
+                fallback_strategy="static_fallback",
+                original_error=original_error,
+                fallback_success=True,
+            )
 
-                # Return static fallback response
-                return {
-                    "success": True,
-                    "animation": self.current_animation,
-                    "sequence_id": None,
-                    "websocket_active": False,
-                    "websocket_healthy": False,
-                    "fallback_used": True,
-                    "fallback_reason": str(original_error),
-                }
+            # Return static fallback response
+            return {
+                "success": True,
+                "animation": self.current_animation,
+                "sequence_id": None,
+                "websocket_active": False,
+                "websocket_healthy": False,
+                "fallback_used": True,
+                "fallback_reason": str(original_error),
+            }
 
-            except Exception as fallback_error:
-                logger.error(f"Animation fallback also failed: {fallback_error}")
-                return {
-                    "success": False,
-                    "error": "Animation system completely failed",
-                    "original_error": str(original_error),
-                    "fallback_error": str(fallback_error),
-                }
+        except Exception as fallback_error:
+            logger.error(f"Animation fallback also failed: {fallback_error}")
+            return {
+                "success": False,
+                "error": "Animation system completely failed",
+                "original_error": str(original_error),
+                "fallback_error": str(fallback_error),
+            }
 
+    def _setup_animation_routes(self):
+        """Setup animation-related routes."""
         @self.app.route("/animate/status")
         def animation_status():
             """Get current animation status with sync information."""

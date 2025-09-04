@@ -11,7 +11,6 @@ import logging
 import time
 from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
 from enum import Enum
 
 import websockets
