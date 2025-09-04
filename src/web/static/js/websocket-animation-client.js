@@ -544,8 +544,8 @@ class WebSocketAnimationClient {
      * Interpolate between two expressions
      */
     async interpolateExpressions(fromExpr, toExpr, progress, blendFactor = 1.0) {
-        const fromParams = this.live2d.expressionMap[fromExpr]?.params || {};
-        const toParams = this.live2d.expressionMap[toExpr]?.params || {};
+        const fromParams = this.live2d.parameterMapping.getExpressionParameters(fromExpr) || {};
+        const toParams = this.live2d.parameterMapping.getExpressionParameters(toExpr) || {};
         
         // Blend parameters
         const allParams = new Set([...Object.keys(fromParams), ...Object.keys(toParams)]);

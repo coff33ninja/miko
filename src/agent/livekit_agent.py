@@ -1,83 +1,98 @@
 """
 LiveKit agent implementation for Anime AI Character system.
-Handles real-time voice interactions with AI providers and memory integration.
+Handles real‑time voice interactions **and** plain‑text chat,
+integrates AI providers, memory and Live2D animation synchronisation.
 """
 
+# --------------------------------------------------------------
+# Standard library
+# --------------------------------------------------------------
 import asyncio
 import logging
 import time
-from typing import Optional, Dict, Any, List
+import random
 from datetime import datetime
+from typing import Optional, Any, Awaitable, Callable
 
-import livekit
-from livekit import agents, rtc
-from livekit.agents import JobContext, WorkerOptions, cli
+# --------------------------------------------------------------
+# LiveKit SDK / Agents
+# --------------------------------------------------------------
+from livekit import rtc
+from livekit.agents import (
+    JobContext,
+    WorkerOptions,
+    cli,
+    JobProcess,  # needed for the pre‑warm hook
+)
 from livekit.agents.voice import Agent as VoiceAgent
-from livekit.agents.llm import LLM, ChatContext, ChatMessage
+from livekit.agents.llm import LLM, ChatContext, ChatMessage, LLMStream
 from livekit.agents.stt import STT
 from livekit.agents.tts import TTS
 from livekit.plugins import openai, silero, deepgram
 
-from ..config.settings import AppConfig
+# --------------------------------------------------------------
+# Project‑specific modules
+# --------------------------------------------------------------
+from ..config.settings import AppConfig, load_config
 from ..ai.provider_factory import ProviderFactory
 from ..memory.memory_manager import MemoryManager, ConversationMessage
 from ..web.app import trigger_animation
-from ..web.animation_sync import get_animation_synchronizer, AnimationPriority
+from ..web.animation_sync import (
+    get_animation_synchronizer,
+    AnimationPriority,
+)
 from ..error_handling.exceptions import LiveKitError, AIProviderError, MemoryError
-from ..error_handling.fallback_manager import get_fallback_manager, FallbackStrategy
-from ..error_handling.error_recovery import get_recovery_manager, RecoveryStrategy
+from ..error_handling.fallback_manager import get_fallback_manager, FallbackStrategy, FallbackResult, FallbackManager  # noqa: F401
+from ..error_handling.error_recovery import get_recovery_manager, RecoveryStrategy, ErrorRecoveryManager  # noqa: F401
 from ..error_handling.logging_handler import get_error_logger
 
+# --------------------------------------------------------------
+# Simple alias – makes the intent clearer in the rest of the file
+# --------------------------------------------------------------
+VoiceAssistant = VoiceAgent
 
+
+# ----------------------------------------------------------------------
+# 1️⃣  Custom LLM wrapper (AnimeAILLM)
+# ----------------------------------------------------------------------
 class AnimeAILLM(LLM):
     """
-    Custom LLM wrapper that integrates with our AI providers and memory system.
+    Custom LLM implementation that talks to the AI provider you configured,
+    stores/retrieves memory, and drives the Live2D animation synchroniser.
     """
 
     def __init__(self, config: AppConfig, memory_manager: MemoryManager):
-        """
-        Initialize the custom LLM.
-
-        Args:
-            config: Application configuration
-            memory_manager: Memory manager instance
-        """
         self.config = config
         self.memory_manager = memory_manager
         self.ai_provider = ProviderFactory.create_provider()
         self.logger = logging.getLogger(__name__)
+
+        # one synchroniser per worker process
         self.animation_sync = get_animation_synchronizer()
 
-        # Error handling components
+        # error‑handling helpers
         self.fallback_manager = get_fallback_manager()
-        self.recovery_manager = get_recovery_manager()
+        self.recovery_manager: ErrorRecoveryManager = get_recovery_manager()
         self.error_logger = get_error_logger()
 
-        # Connection tracking
+        # health‑monitoring
         self.consecutive_failures = 0
         self.last_successful_response = time.time()
         self.connection_healthy = True
 
+    # ------------------------------------------------------------------
+    # LiveKit entry point – must return an LLMStream
+    # ------------------------------------------------------------------
     async def chat(
         self,
         *,
         chat_ctx: ChatContext,
         conn_handle: Optional[Any] = None,
         fnc_ctx: Optional[Any] = None,
-    ) -> "LLMStream":
-        """
-        Process chat messages and generate responses with comprehensive error handling.
-
-        Args:
-            chat_ctx: Chat context with conversation history
-            conn_handle: Connection handle (unused)
-            fnc_ctx: Function context (unused)
-
-        Returns:
-            LLMStream: Stream of response content
-        """
+    ) -> LLMStream:
         user_id = getattr(chat_ctx, "user_id", "default_user")
 
+        # Run the core logic via the fallback manager (primary + retries)
         result = await self.fallback_manager.execute_with_fallback(
             component="livekit_llm",
             primary_operation=self._process_chat_internal,
@@ -91,136 +106,155 @@ class AnimeAILLM(LLM):
 
         if result.success:
             return result.result
-        else:
-            return self._handle_chat_failure(result, user_id)
+        return self._handle_chat_failure(result, user_id)
+
+    # ------------------------------------------------------------------
+    # Core processing – everything that can raise an exception lives here
+    # ------------------------------------------------------------------
+    async def _execute_async_task(
+        self, task: Callable[..., Awaitable[Any]], *args, **kwargs
+    ) -> Any:
+        """Helper to execute an asynchronous task."""
+        self.logger.debug(f"Executing async task: {task.__name__}")
+        return await task(*args, **kwargs)
 
     async def _process_chat_internal(
         self, chat_ctx: ChatContext, user_id: str
     ) -> "AnimeAILLMStream":
-        """Internal chat processing with error handling."""
         try:
-            # Get the latest user message
-            user_message = None
-            for msg in reversed(chat_ctx.messages):
-                if msg.role == "user":
-                    user_message = msg.content
-                    break
-
+            # --------------------------------------------------------------
+            # 1️⃣  Pull the latest user utterance
+            # --------------------------------------------------------------
+            user_message = next(
+                (
+                    msg.content
+                    for msg in reversed(chat_ctx.messages)
+                    if msg.role == "user"
+                ),
+                None,
+            )
             if not user_message:
                 self.logger.warning("No user message found in chat context")
                 return AnimeAILLMStream(
-                    "I didn't hear anything. Could you say that again? (*confused*)"
+                    "I didn't catch that… could you say it again? (*confused*)"
                 )
 
-            # Store user message in memory with error handling
+            # --------------------------------------------------------------
+            # 2️⃣  Store the user utterance in the short‑term memory layer
+            # --------------------------------------------------------------
             try:
-                user_conv_msg = ConversationMessage(
-                    role="user",
-                    content=user_message,
-                    timestamp=datetime.now(),
-                    user_id=user_id,
+                await self.memory_manager.store_conversation(
+                    ConversationMessage(
+                        role="user",
+                        content=user_message,
+                        timestamp=datetime.now(),
+                        user_id=user_id,
+                    )
                 )
-                await self.memory_manager.store_conversation(user_conv_msg)
-            except Exception as memory_error:
-                self.logger.warning(
-                    f"Failed to store user message in memory: {memory_error}"
-                )
-                # Continue without memory storage
+            except Exception as e:
+                self.logger.warning(f"Memory store failed (user): {e}")
 
-            # Get memory context for AI processing
-            memory_context = None
+            # --------------------------------------------------------------
+            # 3️⃣  Retrieve any long‑term context (optional)
+            # --------------------------------------------------------------
             try:
                 memory_context = await self.memory_manager.get_user_context(
                     user_id, user_message
                 )
-            except Exception as memory_error:
-                self.logger.warning(f"Failed to get memory context: {memory_error}")
-                # Continue without memory context
+            except Exception as e:
+                self.logger.warning(f"Memory lookup failed: {e}")
+                memory_context = None
 
-            # Convert chat context to our message format
-            from ..ai.base_provider import Message
+            # --------------------------------------------------------------
+            # 4️⃣  Convert LiveKit ChatMessage objects to the provider‑agnostic format
+            # --------------------------------------------------------------
+            from ..ai.base_provider import (
+                Message,
+            )  # thin wrapper used by ProviderFactory
 
-            messages = []
-            for msg in chat_ctx.messages:
-                messages.append(
-                    Message(
-                        role=msg.role, content=msg.content, timestamp=datetime.now()
-                    )
-                )
+            llm_messages = [
+                Message(role=m.role, content=m.content, timestamp=datetime.now())
+                for m in chat_ctx.messages
+            ]
 
-            # Generate AI response with memory context and error handling
+            # --------------------------------------------------------------
+            # 5️⃣  Call the AI provider (30 s timeout)
+            # --------------------------------------------------------------
             try:
                 response = await asyncio.wait_for(
-                    self.ai_provider.generate_response(
-                        messages,
+                    self._execute_async_task(  # Use the new helper here
+                        self.ai_provider.generate_response,
+                        llm_messages,
                         self.config.personality.personality_prompt,
                         memory_context,
                     ),
                     timeout=30.0,
                 )
-            except asyncio.TimeoutError:
+            except asyncio.TimeoutError as te:
                 raise AIProviderError(
                     "AI response generation timeout",
                     provider=self.ai_provider.get_provider_name(),
-                    details={"timeout": 30.0},
-                )
+                    details={"timeout": 30},
+                ) from te
 
-            # Store AI response in memory
+            # --------------------------------------------------------------
+            # 6️⃣  Store the assistant reply
+            # --------------------------------------------------------------
             try:
-                ai_conv_msg = ConversationMessage(
-                    role="assistant",
-                    content=response,
-                    timestamp=datetime.now(),
-                    user_id=user_id,
+                await self.memory_manager.store_conversation(
+                    ConversationMessage(
+                        role="assistant",
+                        content=response,
+                        timestamp=datetime.now(),
+                        user_id=user_id,
+                    )
                 )
-                await self.memory_manager.store_conversation(ai_conv_msg)
-            except Exception as memory_error:
-                self.logger.warning(
-                    f"Failed to store AI response in memory: {memory_error}"
-                )
-                # Continue without memory storage
+            except Exception as e:
+                self.logger.warning(f"Memory store failed (assistant): {e}")
 
-            # Trigger animation based on response sentiment with error handling
+            # --------------------------------------------------------------
+            # 7️⃣  Fire a synchronized Live2D animation (fallback‑aware)
+            # --------------------------------------------------------------
             try:
                 await self._trigger_synchronized_animation(response, user_message)
-            except Exception as animation_error:
-                self.logger.warning(f"Failed to trigger animation: {animation_error}")
-                # Continue without animation
+            except Exception as e:
+                self.logger.warning(f"Animation trigger failed: {e}")
 
-            # Record successful operation
+            # --------------------------------------------------------------
+            # 8️⃣  Record a successful round‑trip
+            # --------------------------------------------------------------
             self.consecutive_failures = 0
             self.last_successful_response = time.time()
             self.connection_healthy = True
             await self.recovery_manager.record_success("livekit_llm")
 
-            self.logger.info(
-                f"Generated response for user {user_id}: {response[:50]}..."
-            )
-
+            self.logger.info(f"LLM reply for {user_id}: {response[:60]}...")
             return AnimeAILLMStream(response)
 
-        except Exception as e:
+        # ------------------------------------------------------------------
+        # Anything unexpected bubbles up here – we turn it into a LiveKitError
+        # ------------------------------------------------------------------
+        except Exception as exc:
             self.consecutive_failures += 1
-            await self.recovery_manager.record_error("livekit_llm", e)
+            await self.recovery_manager.record_error("livekit_llm", exc)
 
-            # Classify and handle different error types
-            if isinstance(e, AIProviderError):
-                raise e
-            elif isinstance(e, MemoryError):
-                # Memory errors shouldn't stop chat processing
-                self.logger.warning(f"Memory error in chat processing: {e}")
+            if isinstance(exc, AIProviderError):
+                raise exc
+            if isinstance(exc, MemoryError):
+                self.logger.warning(f"Memory error: {exc}")
                 return AnimeAILLMStream(
-                    "I'm having some memory issues, but let's keep chatting! (*smile*)"
+                    "I'm having memory hiccups, but let's keep talking! (*smile*)"
                 )
-            else:
-                raise LiveKitError(
-                    f"Chat processing error: {e}",
-                    operation="chat_processing",
-                    participant_id=user_id,
-                )
+            raise LiveKitError(
+                f"Chat processing error: {exc}",
+                operation="chat_processing",
+                participant_id=user_id,
+            ) from exc
 
-    def _handle_chat_failure(self, result, user_id: str) -> "AnimeAILLMStream":
-        """Handle complete chat processing failure."""
+    # ------------------------------------------------------------------
+    # Fallback‑only error handling – returns a cute anime‑style apology
+    # ------------------------------------------------------------------
+    def _handle_chat_failure(self, result: FallbackResult, user_id: str) -> "AnimeAILLMStream":
         self.error_logger.log_fallback_usage(
             component="livekit_llm",
             fallback_strategy=(
@@ -229,42 +263,35 @@ class AnimeAILLM(LLM):
             original_error=result.error,
             fallback_success=False,
         )
+        return AnimeAILLMStream(
+            random.choice(
+                [
+                    "Gomen! Something went wrong... (*nervous laugh*) Could you try again?",
+                    "Eh? I'm having trouble understanding right now... (*confused*)",
+                    "My brain feels a bit fuzzy… Could you repeat that? (*dizzy*)",
+                    "Something's not working right... But I'm still here! (*determined*)",
+                ]
+            )
+        )
 
-        # Return character-appropriate error message
-        error_responses = [
-            "Gomen! Something went wrong... (*nervous laugh*) Could you try again?",
-            "Eh? I'm having trouble understanding right now... (*confused*)",
-            "My brain feels a bit fuzzy... Could you repeat that? (*dizzy*)",
-            "Something's not working right... But I'm still here! (*determined*)",
-        ]
-
-        import random
-
-        return AnimeAILLMStream(random.choice(error_responses))
-
+    # ------------------------------------------------------------------
+    # Animation synchroniser – primary + fallback via the fallback manager
+    # ------------------------------------------------------------------
     async def _trigger_synchronized_animation(
-        self, response: str, user_message: str
+        self, response: str, user_message: str, priority: Optional[AnimationPriority] = None
     ) -> None:
-        """
-        Trigger synchronized Live2D animation with comprehensive error handling.
-
-        Args:
-            response: AI response text
-            user_message: Original user message for context
-        """
         result = await self.fallback_manager.execute_with_fallback(
             component="animation_sync",
             primary_operation=self._trigger_animation_internal,
-            operation_args=(response, user_message),
+            operation_args=(response, user_message, priority),
             context={
                 "retry_operation": self._trigger_animation_internal,
                 "max_retries": 2,
                 "response_text": response,
+                "priority": priority,
             },
         )
-
         if not result.success:
-            # Log animation failure but don't raise error
             self.error_logger.log_fallback_usage(
                 component="animation_sync",
                 fallback_strategy=(
@@ -274,23 +301,31 @@ class AnimeAILLM(LLM):
                 fallback_success=False,
             )
 
+    # ------------------------------------------------------------------
+    # Low‑level animation call – tries sync first, then direct API
+    # ------------------------------------------------------------------
+    def _run_and_log_sync(self, func: Callable[..., Any], *args, **kwargs) -> Any:
+        """Helper to execute a synchronous callable and log its execution."""
+        self.logger.debug(f"Executing synchronous function: {func.__name__}")
+        return func(*args, **kwargs)
+
     async def _trigger_animation_internal(
-        self, response: str, user_message: str
+        self, response: str, user_message: str, priority: Optional[AnimationPriority] = None
     ) -> bool:
-        """Internal animation triggering with error handling."""
         try:
-            # Analyze sentiment for expression selection
-            expression = self._analyze_response_sentiment(response)
+            expression = self._run_and_log_sync(
+                self._analyze_response_sentiment, response
+            )
+            intensity = self._run_and_log_sync(
+                self._calculate_expression_intensity, response, user_message
+            )
 
-            # Calculate response characteristics
-            intensity = self._calculate_expression_intensity(response, user_message)
+            # rough TTS‑delay estimate (helps the synchroniser align lips)
+            tts_delay = min(0.5, len(response) / 200)
 
-            # Estimate TTS processing delay based on response length
-            tts_delay = min(0.5, len(response) / 200)  # Rough estimate
-
-            # Try synchronized animation first
+            # ①  Try the LiveKit synchroniser (if the deployment supports it)
             try:
-                sequence_id = await asyncio.wait_for(
+                seq_id = await asyncio.wait_for(
                     self.animation_sync.synchronize_with_tts(
                         text=response,
                         expression=expression,
@@ -298,335 +333,323 @@ class AnimeAILLM(LLM):
                     ),
                     timeout=5.0,
                 )
-
-                if sequence_id:
+                if seq_id:
                     self.logger.info(
-                        f"Synchronized animation triggered: {expression} ({sequence_id})"
+                        f"Synchronized animation triggered: {expression} ({seq_id})"
                     )
                     return True
             except asyncio.TimeoutError:
-                self.logger.warning(
-                    "Animation sync timeout, falling back to direct trigger"
-                )
-            except Exception as sync_error:
-                self.logger.warning(f"Animation sync failed: {sync_error}")
+                self.logger.warning("Animation sync timed out – falling back to expression change")
+            except Exception as e:
+                self.logger.warning(f"Animation sync error: {e} – falling back to expression change")
 
-            # Fallback to direct API call
+            # ② Try triggering expression change with priority if provided
+            if priority:
+                try:
+                    seq_id = await asyncio.wait_for(
+                        self.animation_sync.trigger_expression_change(
+                            expression=expression,
+                            intensity=intensity,
+                            priority=priority,
+                        ),
+                        timeout=3.0,
+                    )
+                    if seq_id:
+                        self.logger.info(
+                            f"Expression change triggered with priority: {expression} ({priority.name})"
+                        )
+                        return True
+                except asyncio.TimeoutError:
+                    self.logger.warning("Expression change with priority timed out – falling back to direct animation")
+                except Exception as e:
+                    self.logger.warning(f"Expression change with priority error: {e} – falling back to direct animation")
+
+            # ③  Direct fallback via our own HTTP endpoint
             success = await asyncio.wait_for(
                 trigger_animation(expression, intensity), timeout=3.0
             )
-
             if success:
                 self.logger.info(f"Direct animation triggered: {expression}")
                 return True
-            else:
-                raise Exception("Direct animation trigger returned False")
-
+            raise RuntimeError("Direct animation returned False")
         except asyncio.TimeoutError:
-            raise Exception("Animation trigger timeout")
+            raise RuntimeError("Animation trigger timed out")
         except Exception as e:
-            raise Exception(f"Animation trigger failed: {e}")
+            raise RuntimeError(f"Animation trigger failed: {e}") from e
 
+    # ------------------------------------------------------------------
+    # Sentiment → Live2D expression mapping (tsundere‑style)
+    # ------------------------------------------------------------------
     def _analyze_response_sentiment(self, response: str) -> str:
-        """
-        Analyze response sentiment for expression selection.
-
-        Args:
-            response: AI response text
-
-        Returns:
-            str: Expression name
-        """
-        response_lower = response.lower()
-
-        # Tsundere-specific expressions
-        if any(word in response_lower for word in ["baka", "stupid", "hmph", "idiot"]):
+        r = response.lower()
+        if any(w in r for w in ["baka", "stupid", "hmph", "idiot"]):
             return "angry"
-        elif any(
-            word in response_lower
-            for word in ["blush", "embarrassed", "(*blush*)", "b-but"]
-        ):
+        if any(w in r for w in ["blush", "embarrassed", "(*blush*)", "b-but"]):
             return "embarrassed"
-        elif any(
-            word in response_lower
-            for word in ["happy", "yay", "excited", "(*happy*)", "great"]
-        ):
+        if any(w in r for w in ["happy", "yay", "excited", "(*happy*)", "great"]):
             return "happy"
-        elif any(
-            word in response_lower
-            for word in ["sad", "sorry", "gomen", "(*sad*)", "worried"]
-        ):
+        if any(w in r for w in ["sad", "sorry", "gomen", "(*sad*)", "worried"]):
             return "sad"
-        elif any(
-            word in response_lower
-            for word in ["surprised", "wow", "eh?", "(*surprised*)"]
-        ):
+        if any(w in r for w in ["surprised", "wow", "eh?", "(*surprised*)"]):
             return "surprised"
-        elif "?" in response or any(
-            word in response_lower for word in ["what", "huh", "confused"]
-        ):
+        if "?" in response or any(w in r for w in ["what", "huh", "confused"]):
             return "surprised"
-        else:
-            return "speak"  # Default speaking expression
+        return "speak"
 
+    # ------------------------------------------------------------------
+    # Intensity calculation (0.0‑1.0)
+    # ------------------------------------------------------------------
     def _calculate_expression_intensity(
         self, response: str, user_message: str
     ) -> float:
-        """
-        Calculate expression intensity based on response characteristics.
-
-        Args:
-            response: AI response text
-            user_message: Original user message
-
-        Returns:
-            float: Expression intensity (0.0-1.0)
-        """
-        base_intensity = 0.7
-
-        # Increase intensity for emotional keywords
-        emotional_words = ["baka", "stupid", "amazing", "terrible", "love", "hate"]
-        emotion_count = sum(1 for word in emotional_words if word in response.lower())
-        intensity_boost = min(0.3, emotion_count * 0.1)
-
-        # Increase intensity for exclamation marks
+        base = 0.7
+        emo_words = ["baka", "stupid", "amazing", "terrible", "love", "hate"]
+        emotion_boost = min(0.3, sum(w in response.lower() for w in emo_words) * 0.1)
         exclamation_boost = min(0.2, response.count("!") * 0.05)
-
-        # Increase intensity for longer responses (more engagement)
         length_boost = min(0.1, len(response) / 500)
 
-        final_intensity = (
-            base_intensity + intensity_boost + exclamation_boost + length_boost
+        return min(
+            1.0, max(0.3, base + emotion_boost + exclamation_boost + length_boost)
         )
 
-        return min(1.0, max(0.3, final_intensity))
 
-
-class AnimeAILLMStream:
-    """
-    Simple stream implementation for LLM responses.
-    """
+# ----------------------------------------------------------------------
+# 2️⃣  Stream object required by VoiceAgent
+# ----------------------------------------------------------------------
+class AnimeAILLMStream(LLMStream):
+    """Very small async iterator that yields a single string."""
 
     def __init__(self, content: str):
-        """
-        Initialize stream with content.
-
-        Args:
-            content: Response content
-        """
-        self.content = content
+        self._content = content
         self._sent = False
 
     def __aiter__(self):
         return self
 
     async def __anext__(self):
-        if not self._sent:
-            self._sent = True
-            return self.content
-        else:
+        if self._sent:
             raise StopAsyncIteration
+        self._sent = True
+        return self._content
 
 
+# ----------------------------------------------------------------------
+# 3️⃣  Main LiveKit agent wrapper (AnimeAIAgent)
+# ----------------------------------------------------------------------
 class AnimeAIAgent:
-    """
-    Main LiveKit agent for Anime AI Character interactions.
-    Handles voice processing, AI responses, and memory management.
-    """
+    """Orchestrates memory, the VoiceAgent and LiveKit event handling."""
 
     def __init__(self, config: AppConfig):
-        """
-        Initialize the Anime AI agent.
-
-        Args:
-            config: Application configuration
-        """
         self.config = config
         self.logger = logging.getLogger(__name__)
         self.memory_manager = MemoryManager(config.memory)
         self.voice_assistant: Optional[VoiceAssistant] = None
+        self.room: Optional[rtc.Room] = None  # kept for chat handling
 
+    # --------------------------------------------------------------
     async def initialize(self) -> None:
-        """Initialize the agent components."""
+        """Bring up the memory layer (Mem0, Redis, etc.)."""
         try:
-            # Initialize memory manager
-            mem0_available = await self.memory_manager.initialize()
-            if mem0_available:
-                self.logger.info("Memory manager initialized with Mem0")
-            else:
-                self.logger.info(
-                    "Memory manager initialized with session-only fallback"
-                )
-
-            self.logger.info("Anime AI Agent initialized successfully")
-
-        except Exception as e:
-            self.logger.error(f"Failed to initialize agent: {e}")
+            mem0_ready = await self.memory_manager.initialize()
+            self.logger.info(
+                "Memory manager ready – %s",
+                "Mem0" if mem0_ready else "session‑only fallback",
+            )
+        except Exception as exc:
+            self.logger.error(f"Memory init failed: {exc}")
             raise
 
+    # --------------------------------------------------------------
+    def _create_stt_provider(self) -> STT:
+        name = self.config.agents.stt_provider.lower()
+        if name == "openai":
+            return openai.STT()
+        if name == "deepgram":
+            return deepgram.STT()
+        self.logger.warning(f"Unknown STT provider '{name}', falling back to OpenAI")
+        return openai.STT()
+
+    # --------------------------------------------------------------
+    def _create_tts_provider(self) -> TTS:
+        name = self.config.agents.tts_provider.lower()
+        if name == "openai":
+            return openai.TTS()
+        if name == "silero":
+            return silero.TTS()
+        self.logger.warning(f"Unknown TTS provider '{name}', falling back to OpenAI")
+        return openai.TTS()
+
+    # --------------------------------------------------------------
     def create_voice_agent(self) -> VoiceAgent:
-        """
-        Create and configure the VoiceAgent with STT/TTS providers.
-
-        Returns:
-            VoiceAgent: Configured voice agent
-        """
+        """Build the LiveKit VoiceAgent with custom LLM, STT and TTS."""
         try:
-            # Configure STT provider
-            stt_provider = self._create_stt_provider()
-
-            # Configure TTS provider
-            tts_provider = self._create_tts_provider()
-
-            # Create custom LLM
+            stt = self._create_stt_provider()
+            tts = self._create_tts_provider()
             llm = AnimeAILLM(self.config, self.memory_manager)
 
-            # Create VoiceAgent
             self.voice_assistant = VoiceAgent(
                 instructions=self.config.personality.personality_prompt,
-                vad=silero.VAD.load(),  # Voice Activity Detection
-                stt=stt_provider,
+                vad=silero.VAD.load(),
+                stt=stt,
+                tts=tts,
                 llm=llm,
-                tts=tts_provider,
-                chat_ctx=agents.llm.ChatContext(),
+                chat_ctx=ChatContext(),
             )
-
-            self.logger.info("VoiceAgent created successfully")
+            self.logger.info("VoiceAgent created")
             return self.voice_assistant
-
-        except Exception as e:
-            self.logger.error(f"Failed to create VoiceAgent: {e}")
+        except Exception as exc:
+            self.logger.error(f"VoiceAgent creation failed: {exc}")
             raise
 
-    def _create_stt_provider(self) -> STT:
-        """
-        Create Speech-to-Text provider based on configuration.
-
-        Returns:
-            STT: Configured STT provider
-        """
-        provider_name = self.config.agents.stt_provider.lower()
-
-        if provider_name == "openai":
-            return openai.STT()
-        elif provider_name == "deepgram":
-            return deepgram.STT()
-        else:
-            self.logger.warning(f"Unknown STT provider '{provider_name}', using OpenAI")
-            return openai.STT()
-
-    def _create_tts_provider(self) -> TTS:
-        """
-        Create Text-to-Speech provider based on configuration.
-
-        Returns:
-            TTS: Configured TTS provider
-        """
-        provider_name = self.config.agents.tts_provider.lower()
-
-        if provider_name == "openai":
-            return openai.TTS()
-        elif provider_name == "silero":
-            return silero.TTS()
-        else:
-            self.logger.warning(f"Unknown TTS provider '{provider_name}', using OpenAI")
-            return openai.TTS()
-
+    # --------------------------------------------------------------
     async def handle_participant_connected(
         self, participant: rtc.RemoteParticipant
     ) -> None:
-        """
-        Handle new participant connection.
-
-        Args:
-            participant: Connected participant
-        """
-        self.logger.info(f"Participant connected: {participant.identity}")
-
-        # Set user ID for memory context
-        if hasattr(self.voice_assistant, "chat_ctx"):
+        self.logger.info(f"Participant joined: {participant.identity}")
+        if self.voice_assistant and hasattr(self.voice_assistant, "chat_ctx"):
             self.voice_assistant.chat_ctx.user_id = participant.identity
 
+    # --------------------------------------------------------------
     async def handle_participant_disconnected(
         self, participant: rtc.RemoteParticipant
     ) -> None:
-        """
-        Handle participant disconnection.
+        self.logger.info(f"Participant left: {participant.identity}")
 
-        Args:
-            participant: Disconnected participant
+    # --------------------------------------------------------------
+    async def handle_chat_message(self, chat_msg: Any) -> None:
         """
-        self.logger.info(f"Participant disconnected: {participant.identity}")
-
-    async def start_agent(self, room: rtc.Room) -> None:
+        Called whenever a plain‑text chat message arrives.
+        It re‑uses the same LLM pipeline, stores the message in memory,
+        and sends the assistant’s reply back as a chat message.
         """
-        Start the agent in a LiveKit room.
-
-        Args:
-            room: LiveKit room to join
-        """
+        # ------------------------------------------------------------------
+        # 1️⃣  Extract useful fields (different SDK versions expose them
+        #      slightly differently – we try the most common ones)
+        # ------------------------------------------------------------------
         try:
-            await self.initialize()
+            user_id = (
+                chat_msg.sender.identity
+                if hasattr(chat_msg, "sender") and hasattr(chat_msg.sender, "identity")
+                else getattr(chat_msg, "identity", "unknown_user")
+            )
+            content = getattr(chat_msg, "message", "")
+        except Exception:
+            self.logger.warning("Malformed chat message received – ignoring")
+            return
 
-            # Create voice agent
+        self.logger.info(f"Chat message from {user_id}: {content}")
+
+        # ------------------------------------------------------------------
+        # 2️⃣  Push the message into the VoiceAgent's ChatContext so that
+        #      the LLM sees the full history.
+        # ------------------------------------------------------------------
+        if self.voice_assistant and hasattr(self.voice_assistant, "chat_ctx"):
+            ctx = self.voice_assistant.chat_ctx
+        else:
+            ctx = ChatContext()
+            if self.voice_assistant:
+                self.voice_assistant.chat_ctx = ctx
+
+        ctx.messages.append(ChatMessage(role="user", content=content))
+
+        # ------------------------------------------------------------------
+        # 3️⃣  Ask the LLM for a reply (the same pipeline we use for voice)
+        # ------------------------------------------------------------------
+        try:
+            response_stream = await self.voice_assistant.llm.chat(chat_ctx=ctx)
+            reply_text = await response_stream.__anext__()
+        except Exception as exc:
+            self.logger.error(f"LLM chat failure for text message: {exc}")
+            reply_text = "Sorry, I’m having trouble right now…"
+
+        # ------------------------------------------------------------------
+        # 4️⃣  Send the reply back via the chat manager (if available)
+        # ------------------------------------------------------------------
+        try:
+            # ``room.chat`` is the helper that knows how to send a ChatMessage
+            if self.room and hasattr(self.room, "chat"):
+                await self.room.chat.send(reply_text)
+            else:
+                # fallback – use the low‑level data channel (this works on older SDKs)
+                await self.room.local_participant.publish_data(
+                    reply_text.encode(),
+                    kind=rtc.DataPacketKind.RELIABLE,
+                    label="chat",
+                )
+        except Exception as exc:
+            self.logger.error(f"Failed to send chat reply: {exc}")
+
+    # --------------------------------------------------------------
+    async def start_agent(self, room: rtc.Room) -> None:
+        """Wire everything together and launch the voice pipeline."""
+        try:
+            self.room = room  # keep a reference for chat handling
+            await self.initialize()
             voice_agent = self.create_voice_agent()
 
-            # Set up event handlers
+            # LiveKit event hooks
             room.on("participant_connected", self.handle_participant_connected)
             room.on("participant_disconnected", self.handle_participant_disconnected)
 
-            # Start the voice agent
+            # ---- NEW ---- chat‑message hook (compatible with both APIs) ----
+            if hasattr(room, "chat"):
+                # newer SDK – ChatManager emits "message_received"
+                room.chat.on("message_received", self.handle_chat_message)
+            else:
+                # older SDK – generic event name
+                room.on("chat_message_received", self.handle_chat_message)
+
+            # Start processing audio for the whole room
             voice_agent.start(room)
 
-            self.logger.info("Anime AI Agent started successfully")
-
-        except Exception as e:
-            self.logger.error(f"Failed to start agent: {e}")
+            self.logger.info("Anime AI Agent started")
+        except Exception as exc:
+            self.logger.error(f"Failed to start agent: {exc}")
             raise
 
 
+# ----------------------------------------------------------------------
+# 4️⃣  LiveKit worker entry point
+# ----------------------------------------------------------------------
 async def entrypoint(ctx: JobContext) -> None:
-    """
-    Main entrypoint for the LiveKit agent.
-
-    Args:
-        ctx: Job context from LiveKit
-    """
     logger = logging.getLogger(__name__)
 
     try:
-        # Load configuration
-        from ..config.settings import load_config
-
-        config = load_config()
-
-        logger.info("Starting Anime AI Character agent...")
-
-        # Create and start agent
-        agent = AnimeAIAgent(config)
+        cfg = load_config()
+        logger.info("Launching Anime AI Character agent…")
+        agent = AnimeAIAgent(cfg)
         await agent.start_agent(ctx.room)
 
-        # Keep the agent running
+        # Keep the process alive until LiveKit stops the job
         await asyncio.sleep(float("inf"))
-
-    except Exception as e:
-        logger.error(f"Agent entrypoint error: {e}")
+    except Exception as exc:
+        logger.error(f"Entry‑point error: {exc}")
         raise
 
 
-def main():
-    """Main function to run the agent."""
-    # Set up logging
+# ----------------------------------------------------------------------
+# 5️⃣  Pre‑warm – load the VAD model before any participant joins
+# ----------------------------------------------------------------------
+def prewarm(proc: JobProcess) -> None:
+    """
+    LiveKit calls this once per worker before any room is attached.
+    We simply load the Silero VAD into ``proc.userdata`` so the LLM can reuse it.
+    """
+    proc.userdata["vad"] = silero.VAD.load()
+
+
+# ----------------------------------------------------------------------
+# 6️⃣  CLI launcher
+# ----------------------------------------------------------------------
+def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-
-    # Run the agent
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
-            prewarm_fnc=None,
+            prewarm_fnc=prewarm,  # ← now we have a pre‑warm hook
         )
     )
 
