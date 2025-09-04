@@ -70,13 +70,12 @@ class Live2DFlaskApp:
         self.consecutive_failures = 0
         self.last_successful_request = time.time()
         self.websocket_healthy = False
-        self._setup_routes()
-        self._register_error_recovery()
-        self._setup_routes()
-        # Separate animation routes are set up in their own method
-        # to keep route registration organized.
-        self._setup_animation_routes()
-        self._register_error_recovery()
+    # Register routes and error recovery once
+    self._setup_routes()
+    self._register_error_recovery()
+    # Separate animation routes are set up in their own method
+    # to keep route registration organized.
+    self._setup_animation_routes()
 
     def _setup_routes(self):
         """Set up Flask routes for the application."""
@@ -212,94 +211,92 @@ class Live2DFlaskApp:
         else:
             return asyncio.run(coro)
 
-        async def _execute_animation_with_fallback(
-            self,
-            expression: str,
-            intensity: float,
-            duration: float,
-            priority: AnimationPriority,
-            sync_with_audio: bool,
-        ) -> Dict[str, Any]:
-            """Execute animation with fallback strategies."""
-            try:
-                # Update animation state
-                self.current_animation = {
-                    "expression": expression,
-                    "intensity": intensity,
-                    "duration": duration,
-                    "timestamp": datetime.now(),
-                    "sync_with_audio": sync_with_audio,
-                }
+    async def _execute_animation_with_fallback(
+        self,
+        expression: str,
+        intensity: float,
+        duration: float,
+        priority: AnimationPriority,
+        sync_with_audio: bool,
+    ) -> Dict[str, Any]:
+        """Execute animation with fallback strategies."""
+        try:
+            # Update animation state
+            self.current_animation = {
+                "expression": expression,
+                "intensity": intensity,
+                "duration": duration,
+                "timestamp": datetime.now(),
+                "sync_with_audio": sync_with_audio,
+            }
 
-                # Try WebSocket animation first
-                sequence_id = None
-                if self.websocket_loop and not self.websocket_loop.is_closed():
-                    try:
-                        # Schedule animation in the WebSocket event loop
-                        future = asyncio.run_coroutine_threadsafe(
-                            self.animation_sync.trigger_expression_change(
-                                expression=expression,
-                                intensity=intensity,
-                                duration=duration,
-                                priority=priority,
-                            ),
-                            self.websocket_loop,
-                        )
-                        sequence_id = await asyncio.wait_for(
-                            asyncio.wrap_future(future), timeout=5.0
-                        )
+            # Try WebSocket animation first
+            sequence_id = None
+            if self.websocket_loop and not self.websocket_loop.is_closed():
+                try:
+                    # Schedule animation in the WebSocket event loop
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.animation_sync.trigger_expression_change(
+                            expression=expression,
+                            intensity=intensity,
+                            duration=duration,
+                            priority=priority,
+                        ),
+                        self.websocket_loop,
+                    )
+                    sequence_id = await asyncio.wait_for(
+                        asyncio.wrap_future(future), timeout=5.0
+                    )
 
-                        self.websocket_healthy = True
+                    self.websocket_healthy = True
 
-                    except asyncio.TimeoutError:
-                        logger.warning(
-                            "WebSocket animation timeout, using static fallback"
-                        )
-                        raise Live2DError(
-                            "WebSocket animation timeout",
-                            operation="trigger_animation",
-                            animation_type=expression,
-                        )
-                    except Exception as sync_error:
-                        logger.warning(f"WebSocket sync failed: {sync_error}")
-                        self.websocket_healthy = False
-                        raise Live2DError(
-                            f"WebSocket sync failed: {sync_error}",
-                            operation="trigger_animation",
-                            animation_type=expression,
-                        )
-                else:
-                    # WebSocket not available, use static fallback
-                    logger.info("WebSocket not available, using static animation")
+                except asyncio.TimeoutError:
+                    logger.warning("WebSocket animation timeout, using static fallback")
+                    raise Live2DError(
+                        "WebSocket animation timeout",
+                        operation="trigger_animation",
+                        animation_type=expression,
+                    )
+                except Exception as sync_error:
+                    logger.warning(f"WebSocket sync failed: {sync_error}")
                     self.websocket_healthy = False
+                    raise Live2DError(
+                        f"WebSocket sync failed: {sync_error}",
+                        operation="trigger_animation",
+                        animation_type=expression,
+                    )
+            else:
+                # WebSocket not available, use static fallback
+                logger.info("WebSocket not available, using static animation")
+                self.websocket_healthy = False
 
-                logger.info(
-                    f"Animation triggered: {expression} (intensity: {intensity}, duration: {duration})"
-                )
+            logger.info(
+                f"Animation triggered: {expression} (intensity: {intensity}, duration: {duration})"
+            )
 
-                return {
-                    "success": True,
-                    "animation": self.current_animation,
-                    "sequence_id": sequence_id,
-                    "websocket_active": self.websocket_loop is not None
-                    and not self.websocket_loop.is_closed(),
-                    "websocket_healthy": self.websocket_healthy,
-                }
+            return {
+                "success": True,
+                "animation": self.current_animation,
+                "sequence_id": sequence_id,
+                "websocket_active": self.websocket_loop is not None
+                and not self.websocket_loop.is_closed(),
+                "websocket_healthy": self.websocket_healthy,
+            }
 
-            except Live2DError as e:
-                # Handle Live2D specific errors with fallback
-                return await self._handle_animation_fallback(expression, intensity, e)
-            except Exception as e:
-                # Handle unexpected errors
-                self.error_logger.log_error(
-                    e, component="web_server", operation="execute_animation"
-                )
-                return {
-                    "success": False,
-                    "error": "Animation system error",
-                    "fallback_used": True,
-                    "animation": self.current_animation,
-                }
+        except Live2DError as e:
+            # Handle Live2D specific errors with fallback
+            return await self._handle_animation_fallback(expression, intensity, e)
+        except Exception as e:
+            # Handle unexpected errors
+            self.error_logger.log_error(
+                e, component="web_server", operation="execute_animation"
+            )
+            return {
+                "success": False,
+                "error": "Animation system error",
+                "fallback_used": True,
+                "animation": self.current_animation,
+            }
 
     async def _handle_animation_fallback(
         self, expression: str, intensity: float, original_error: Exception
