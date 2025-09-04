@@ -6,7 +6,6 @@ This script starts the Flask web server with proper configuration
 and error handling for the Live2D model serving and animation API.
 """
 
-import os
 import sys
 import logging
 from pathlib import Path
@@ -15,6 +14,7 @@ from pathlib import Path
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 
+# Project imports (require src on sys.path)
 from config.settings import load_config, ConfigurationError
 from .app import Live2DFlaskApp
 

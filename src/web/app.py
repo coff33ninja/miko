@@ -70,12 +70,12 @@ class Live2DFlaskApp:
         self.consecutive_failures = 0
         self.last_successful_request = time.time()
         self.websocket_healthy = False
-    # Register routes and error recovery once
-    self._setup_routes()
-    self._register_error_recovery()
-    # Separate animation routes are set up in their own method
-    # to keep route registration organized.
-    self._setup_animation_routes()
+        # Register routes and error recovery once
+        self._setup_routes()
+        self._register_error_recovery()
+        # Separate animation routes are set up in their own method
+        # to keep route registration organized.
+        self._setup_animation_routes()
 
     def _setup_routes(self):
         """Set up Flask routes for the application."""
