@@ -6,16 +6,11 @@ This script starts the Flask web server with proper configuration
 and error handling for the Live2D model serving and animation API.
 """
 
-import sys
 import logging
-from pathlib import Path
+import sys
 
-# Set up path before any imports
-Path(__file__).parent.parent.absolute() in sys.path or sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
-
-# All imports must be at module level
-from config.settings import load_config, ConfigurationError  # noqa: E402
-from .app import Live2DFlaskApp  # noqa: E402
+from src.config.settings import load_config, ConfigurationError
+from src.web.app import Live2DFlaskApp
 
 
 def setup_logging(log_level: str = "INFO"):
