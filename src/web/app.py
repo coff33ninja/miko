@@ -90,8 +90,14 @@ class Live2DFlaskApp:
         def animate():
             """API endpoint for triggering Live2D expressions with comprehensive error handling."""
             try:
+                # Parse request data and add extra debug logging for troubleshooting
+                logger.debug(f"Received /animate request content-type: {request.content_type}")
+                logger.debug(f"Raw request data: {request.data}")
+
                 # Validate and parse request data
                 data = request.get_json(force=True, silent=True)
+                logger.debug(f"Parsed JSON data for /animate: {data}")
+
                 if data is None:
                     raise ValidationError("No JSON data provided")
 
@@ -101,14 +107,41 @@ class Live2DFlaskApp:
                 priority = data.get("priority")
                 sync_with_audio = data.get("sync_with_audio", False)
 
-                if not all([expression, intensity, duration, priority]):
-                    raise ValidationError("Missing required animation parameters")
+                # Explicitly check presence of required fields (allow zero values where valid)
+                required_fields = ["expression", "intensity", "duration"]
+                missing = [f for f in required_fields if f not in data or data.get(f) is None]
 
-                # Ensure correct types
+                # Priority is optional; default to NORMAL if missing
+                if priority is None:
+                    logger.debug("Priority not provided in /animate request; defaulting to 'normal'")
+                    priority = "normal"
+
+                if missing:
+                    raise ValidationError(f"Missing required animation parameters: {missing}")
+
+                # Ensure correct types and coerce priority (accept strings or numeric values)
                 try:
                     intensity = float(intensity)
                     duration = float(duration)
-                    priority = AnimationPriority[priority.upper()]
+
+                    # Coerce priority
+                    if isinstance(priority, str):
+                        try:
+                            priority = AnimationPriority[priority.upper()]
+                        except KeyError:
+                            logger.warning(f"Unknown priority string '{priority}', defaulting to NORMAL")
+                            priority = AnimationPriority.NORMAL
+                    elif isinstance(priority, (int, float)):
+                        # Map numeric priority to enum by value if possible
+                        try:
+                            priority = AnimationPriority(int(priority))
+                        except Exception:
+                            logger.warning(f"Numeric priority '{priority}' not valid, defaulting to NORMAL")
+                            priority = AnimationPriority.NORMAL
+                    else:
+                        logger.warning(f"Unrecognized priority type {type(priority)}, defaulting to NORMAL")
+                        priority = AnimationPriority.NORMAL
+
                 except (ValueError, KeyError) as e:
                     raise ValidationError(f"Invalid parameter type or value: {e}")
 
