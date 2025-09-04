@@ -9,11 +9,13 @@ This module provides advanced animation synchronization capabilities including:
 """
 
 import asyncio
+import json
 import logging
 import time
 import uuid
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
+from datetime import datetime, timedelta
 from enum import Enum
 
 from .websocket_manager import (
@@ -107,6 +109,8 @@ class AnimationSynchronizer:
         # Performance tracking
         self.sync_accuracy_samples: List[float] = []
         self.max_accuracy_samples = 50
+        self.last_sync_time: Optional[datetime] = None
+        self.sync_interval: timedelta = timedelta(milliseconds=100)
 
         # Register event handlers
         self._register_event_handlers()
@@ -150,7 +154,7 @@ class AnimationSynchronizer:
                 audio_duration = self._estimate_audio_duration(text)
 
             # Create timing synchronization data
-            timing_sync = self.websocket_manager.create_timing_sync(
+            timing_sync: TimingSyncData = self.websocket_manager.create_timing_sync(
                 audio_duration=audio_duration, tts_delay=tts_processing_delay
             )
 
@@ -490,7 +494,7 @@ class AnimationSynchronizer:
         # Apply smoothing (this would be handled by the client-side animation system)
         return min(config.max_mouth_open, max(config.min_mouth_open, mouth_open))
 
-    def _calculate_mouth_form(self, frequency_data: List[float]) -> float:
+    def _calculate_mouth_form(self, frequency_data: List[float]) -> Tuple[float, float]:
         """
         Calculate mouth form parameter from frequency analysis.
 
@@ -498,7 +502,7 @@ class AnimationSynchronizer:
             frequency_data: Frequency analysis data
 
         Returns:
-            float: Mouth form parameter
+            Tuple[float, float]: Mouth form parameter and confidence score
         """
         if not frequency_data:
             return 0.0
@@ -510,8 +514,9 @@ class AnimationSynchronizer:
 
         # Map to mouth form with variation
         form_value = (high_freq_ratio - 0.5) * self.mouth_sync_config.form_variation
+        confidence = min(1.0, high_freq_ratio * 2)  # Calculate confidence score
 
-        return max(-1.0, min(1.0, form_value))
+        return (max(-1.0, min(1.0, form_value)), confidence)
 
     def _estimate_audio_duration(self, text: str) -> float:
         """
