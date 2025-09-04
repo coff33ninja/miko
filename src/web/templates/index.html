@@ -6,21 +6,19 @@
     <title>Anime AI Character - Live2D Interactive Experience</title>
 
     <!-- Live2D Cubism SDK -->
-    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
-    <script src="/static/js/live2dcubismframework.js"></script>
-    <script src="/static/js/live2dcubismpixi.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/5.3.12/pixi.min.js"></script>
+    <script defer src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/5.3.12/pixi.min.js"></script>
 
     <!-- LiveKit SDK -->
-    <script src="/static/js/livekit-client.umd.js"></script>
+    <script defer src="/static/js/livekit-client.umd.js"></script>
 
     <!-- Animation System Scripts -->
-    <script src="/static/js/live2d-parameter-mapping.js"></script>
-    <script src="/static/js/live2d-integration.js"></script>
-    <script src="/static/js/animation-controller.js"></script>
-    <script src="/static/js/websocket-animation-client.js"></script>
-    <script src="/static/js/animation-tests.js"></script>
-    <script src="/static/js/web-interface-tests.js"></script>
+    <script defer src="/static/js/live2d-parameter-mapping.js"></script>
+    <script defer src="/static/js/live2d-integration.js"></script>
+    <script defer src="/static/js/animation-controller.js"></script>
+    <script defer src="/static/js/websocket-animation-client.js"></script>
+    <script defer src="/static/js/animation-tests.js"></script>
+    <script defer src="/static/js/web-interface-tests.js"></script>
 
     <style>
       * {
@@ -45,7 +43,12 @@
 
       .live2d-container {
         flex: 1;
-        position: relative;
+        position: relative;
+        z-index: 1;
+        background: rgba(0, 0, 0, 0.2);
+        margin: 10px;
+        border-radius: 10px;
+        z-index: 1;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -759,8 +762,7 @@
 
       // Configuration from Flask template
       const LIVEKIT_URL = "{{ livekit_url }}";
-      const MODEL_URL =
-        "{{ model_url }}" || "/static/models/Poblanc.model3.json";
+      const MODEL_URL = "{{ model_url }}";
 
       // DOM elements
       const connectBtn = document.getElementById("connect-btn");

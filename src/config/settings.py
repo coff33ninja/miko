@@ -59,7 +59,7 @@ class MemoryConfig:
 class Live2DConfig:
     """Live2D model configuration."""
 
-    model_url: str = "/static/models/Poblanc.model3.json"
+    model_url: str
     textures_url: str = "/static/models/textures/"
 
 
@@ -185,10 +185,9 @@ class ConfigManager:
             )
 
             # Live2D configuration
+            # Live2D configuration
             live2d_config = Live2DConfig(
-                model_url=os.getenv(
-                    "LIVE2D_MODEL_URL", "/static/models/Poblanc.model3.json"
-                ),
+                model_url=self._get_required_env("LIVE2D_MODEL_URL"),
                 textures_url=os.getenv(
                     "LIVE2D_TEXTURES_URL", "/static/models/textures/"
                 ),
