@@ -7,7 +7,7 @@ This script starts the LiveKit agent with proper configuration.
 import sys
 import logging
 from pathlib import Path
-from agent.livekit_agent import main
+from src.agent.livekit_agent import main
 
 # Add src directory to Python path
 src_dir = Path(__file__).parent.parent

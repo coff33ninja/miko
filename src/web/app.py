@@ -20,22 +20,22 @@ import time
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from livekit import api
 
-from config.settings import get_settings
-from web.websocket_manager import (
+from src.config.settings import get_settings
+from src.web.websocket_manager import (
     get_websocket_manager,
     AnimationEvent,
     AnimationEventType,
 )
-from web.animation_sync import get_animation_synchronizer, AnimationPriority
-from error_handling.exceptions import (
+from src.web.animation_sync import get_animation_synchronizer, AnimationPriority
+from src.error_handling.exceptions import (
     Live2DError,
     NetworkError,
     ValidationError,
     LiveKitError,
 )
-from error_handling.fallback_manager import get_fallback_manager, FallbackStrategy
-from error_handling.error_recovery import get_recovery_manager, RecoveryStrategy
-from error_handling.logging_handler import get_error_logger
+from src.error_handling.fallback_manager import get_fallback_manager, FallbackStrategy
+from src.error_handling.error_recovery import get_recovery_manager, RecoveryStrategy
+from src.error_handling.logging_handler import get_error_logger
 
 # Configure logging
 logger = logging.getLogger(__name__)
