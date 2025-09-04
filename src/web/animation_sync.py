@@ -9,13 +9,11 @@ This module provides advanced animation synchronization capabilities including:
 """
 
 import asyncio
-import json
 import logging
 import time
 import uuid
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
 from enum import Enum
 
 from .websocket_manager import (
@@ -579,9 +577,9 @@ class AnimationSynchronizer:
         Get current animation state.
 
         Returns:
-            Dict: Current animation state
+            Dict: Current animation state as JSON-serializable dictionary
         """
-        return {
+        state_dict = {
             "current_expression": self.current_expression,
             "target_expression": self.target_expression,
             "is_speaking": self.is_speaking,
@@ -589,7 +587,9 @@ class AnimationSynchronizer:
             "active_sequences": len(self.active_sequences),
             "sync_accuracy": self.get_sync_accuracy(),
             "audio_active": self.audio_start_time is not None,
+            "timestamp": datetime.now().isoformat()
         }
+        return json.dumps(state_dict)
 
     async def cleanup_expired_sequences(self) -> None:
         """Clean up expired animation sequences."""
