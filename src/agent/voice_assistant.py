@@ -8,10 +8,10 @@ import logging
 from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 
-from livekit import agents, rtc
-from livekit.agents import JobContext
+
+from livekit import rtc
 from livekit.agents.voice import Agent as VoiceAgent
-from livekit.agents.llm import ChatContext, ChatMessage
+from livekit.agents.llm import ChatContext
 
 from ..config.settings import AppConfig
 from ..memory.memory_manager import MemoryManager, ConversationMessage
@@ -223,91 +223,3 @@ class VoiceAssistantFactory:
         )
 
         return enhanced_assistant
-
-
-class AgentEventHandler:
-    """
-    Event handler for LiveKit agent events.
-    """
-
-    def __init__(self, agent: "AnimeAIAgent"):
-        """
-        Initialize event handler.
-
-        Args:
-            agent: Reference to the main agent
-        """
-        self.agent = agent
-        self.logger = logging.getLogger(__name__)
-
-    async def on_participant_connected(
-        self, participant: rtc.RemoteParticipant
-    ) -> None:
-        """
-        Handle participant connection.
-
-        Args:
-            participant: Connected participant
-        """
-        self.logger.info(f"Participant connected: {participant.identity}")
-
-        # Send welcome message
-        welcome_msg = (
-            "Konnichiwa! I'm Miko, your anime AI companion! (*excited wave*) "
-            "You can talk to me using your voice, and I'll remember our conversations! "
-            "What would you like to chat about? (＾◡＾)"
-        )
-
-        if hasattr(self.agent, "voice_assistant") and self.agent.voice_assistant:
-            await self.agent.voice_assistant.say(welcome_msg, participant)
-
-    async def on_participant_disconnected(
-        self, participant: rtc.RemoteParticipant
-    ) -> None:
-        """
-        Handle participant disconnection.
-
-        Args:
-            participant: Disconnected participant
-        """
-        self.logger.info(f"Participant disconnected: {participant.identity}")
-
-        # Clean up user session if needed
-        if hasattr(self.agent, "voice_assistant") and self.agent.voice_assistant:
-            active_users = self.agent.voice_assistant.get_active_users()
-            if participant.identity in active_users:
-                del active_users[participant.identity]
-
-    async def on_track_subscribed(
-        self,
-        track: rtc.Track,
-        publication: rtc.TrackPublication,
-        participant: rtc.RemoteParticipant,
-    ) -> None:
-        """
-        Handle track subscription (audio/video).
-
-        Args:
-            track: Subscribed track
-            publication: Track publication
-            participant: Participant who published the track
-        """
-        self.logger.info(f"Track subscribed: {track.kind} from {participant.identity}")
-
-    async def on_track_unsubscribed(
-        self,
-        track: rtc.Track,
-        publication: rtc.TrackPublication,
-        participant: rtc.RemoteParticipant,
-    ) -> None:
-        """
-        Handle track unsubscription.
-
-        Args:
-            track: Unsubscribed track
-            publication: Track publication
-            participant: Participant who published the track
-        """
-        self.logger.info(
-            f"Track unsubscribed: {track.kind} from {participant.identity}"
-        )

@@ -509,11 +509,27 @@ class AnimeAIAgent:
         if self.voice_assistant and hasattr(self.voice_assistant, "chat_ctx"):
             self.voice_assistant.chat_ctx.user_id = participant.identity
 
+        # Send welcome message
+        welcome_msg = (
+            "Konnichiwa! I'm Miko, your anime AI companion! (*excited wave*) "
+            "You can talk to me using your voice, and I'll remember our conversations! "
+            "What would you like to chat about? (＾◡＾)"
+        )
+
+        if self.voice_assistant:
+            await self.voice_assistant.say(welcome_msg, participant)
+
     # --------------------------------------------------------------
     async def handle_participant_disconnected(
         self, participant: rtc.RemoteParticipant
     ) -> None:
         self.logger.info(f"Participant left: {participant.identity}")
+
+        # Clean up user session if needed
+        if self.voice_assistant:
+            active_users = self.voice_assistant.get_active_users()
+            if participant.identity in active_users:
+                del active_users[participant.identity]
 
     # --------------------------------------------------------------
     async def handle_chat_message(self, chat_msg: Any) -> None:
