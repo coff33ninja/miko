@@ -10,13 +10,12 @@ import sys
 import logging
 from pathlib import Path
 
-# Add src directory to Python path for local imports
-src_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(src_dir))
+# Set up path before any imports
+Path(__file__).parent.parent.absolute() in sys.path or sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
 
-# Now we can import local modules
-from config.settings import load_config, ConfigurationError
-from .app import Live2DFlaskApp
+# All imports must be at module level
+from config.settings import load_config, ConfigurationError  # noqa: E402
+from .app import Live2DFlaskApp  # noqa: E402
 
 
 def setup_logging(log_level: str = "INFO"):
