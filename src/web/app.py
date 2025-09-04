@@ -21,7 +21,11 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 from livekit import api
 
 from config.settings import get_settings
-from web.websocket_manager import get_websocket_manager
+from web.websocket_manager import (
+    get_websocket_manager,
+    AnimationEvent,
+    AnimationEventType,
+)
 from web.animation_sync import get_animation_synchronizer, AnimationPriority
 from error_handling.exceptions import (
     Live2DError,
@@ -88,9 +92,7 @@ class Live2DFlaskApp:
             try:
                 # Validate and parse request data
                 data = request.get_json(force=True, silent=True)
-                logger.info(f"Received animation request data: {data}")
                 if data is None:
-                    logger.warning("Animation request failed: No JSON data provided")
                     raise ValidationError("No JSON data provided")
 
                 expression = data.get("expression")
@@ -100,14 +102,7 @@ class Live2DFlaskApp:
                 sync_with_audio = data.get("sync_with_audio", False)
 
                 if not all([expression, intensity, duration, priority]):
-                    missing_params = []
-                    if not expression: missing_params.append("expression")
-                    if not intensity: missing_params.append("intensity") 
-                    if not duration: missing_params.append("duration")
-                    if not priority: missing_params.append("priority")
-                    error_msg = f"Missing required animation parameters: {', '.join(missing_params)}"
-                    logger.warning(f"Animation request validation failed: {error_msg}. Received data: {data}")
-                    raise ValidationError(error_msg)
+                    raise ValidationError("Missing required animation parameters")
 
                 # Ensure correct types
                 try:
@@ -118,41 +113,11 @@ class Live2DFlaskApp:
                     raise ValidationError(f"Invalid parameter type or value: {e}")
 
                 # Execute animation with fallback
-                try:
-                    # Try to get existing event loop, create new one if none exists
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            # If loop is running, we need to use run_coroutine_threadsafe
-                            import concurrent.futures
-                            with concurrent.futures.ThreadPoolExecutor() as executor:
-                                future = executor.submit(
-                                    asyncio.run,
-                                    self._execute_animation_with_fallback(
-                                        expression, intensity, duration, priority, sync_with_audio
-                                    )
-                                )
-                                result = future.result(timeout=10.0)
-                        else:
-                            result = loop.run_until_complete(
-                                self._execute_animation_with_fallback(
-                                    expression, intensity, duration, priority, sync_with_audio
-                                )
-                            )
-                    except RuntimeError:
-                        # No event loop exists, create one
-                        result = asyncio.run(
-                            self._execute_animation_with_fallback(
-                                expression, intensity, duration, priority, sync_with_audio
-                            )
-                        )
-                except Exception as async_error:
-                    logger.error(f"Async execution error: {async_error}")
-                    result = {
-                        "success": False,
-                        "error": f"Animation execution failed: {str(async_error)}",
-                        "fallback_used": True
-                    }
+                result = asyncio.run(
+                    self._execute_animation_with_fallback(
+                        expression, intensity, duration, priority, sync_with_audio
+                    )
+                )
 
                 if result["success"]:
                     self.consecutive_failures = 0
@@ -165,12 +130,11 @@ class Live2DFlaskApp:
                 return jsonify({"error": str(e), "error_type": "validation"}), 400
             except Exception as e:
                 self.consecutive_failures += 1
-                logger.exception("Error in animate endpoint:") # Added for debugging
+                logger.exception("Error in animate endpoint:")  # Added for debugging
                 self.error_logger.log_error(
                     e, component="web_server", operation="animate"
                 )
                 return jsonify({"error": "Internal server error"}), 500
-
 
         async def _execute_animation_with_fallback(
             self,
