@@ -10,11 +10,11 @@ import sys
 import logging
 from pathlib import Path
 
-# Add src directory to Python path
+# Add src directory to Python path for local imports
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 
-# Project imports (require src on sys.path)
+# Now we can import local modules
 from config.settings import load_config, ConfigurationError
 from .app import Live2DFlaskApp
 
