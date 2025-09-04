@@ -70,7 +70,8 @@ class Live2DFlaskApp:
         self.consecutive_failures = 0
         self.last_successful_request = time.time()
         self.websocket_healthy = False
-
+        self._setup_routes()
+        self._register_error_recovery()
         self._setup_routes()
         # Separate animation routes are set up in their own method
         # to keep route registration organized.
