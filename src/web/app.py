@@ -574,6 +574,24 @@ class Live2DFlaskApp:
             logger.error(f"Internal server error: {error}")
             return jsonify({"error": "Internal server error"}), 500
 
+        @self.app.route("/debug/animation_types")
+        def animation_types_info():
+            """Return information about AnimationEvent and AnimationEventType."""
+            event_info = {
+                "class_name": AnimationEvent.__name__,
+                "doc": AnimationEvent.__doc__,
+                "fields": list(AnimationEvent.__annotations__.keys())
+            }
+            event_type_info = {
+                "class_name": AnimationEventType.__name__,
+                "doc": AnimationEventType.__doc__,
+                "members": [member.name for member in AnimationEventType]
+            }
+            return jsonify({
+                "AnimationEvent": event_info,
+                "AnimationEventType": event_type_info
+            })
+
     def run(self, host="0.0.0.0", port=5000, debug=False, enable_websocket=True):
         """Run the Flask application with optional WebSocket server."""
         logger.info(f"Starting Flask server on {host}:{port}")
