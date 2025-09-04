@@ -72,6 +72,9 @@ class Live2DFlaskApp:
         self.websocket_healthy = False
 
         self._setup_routes()
+        # Separate animation routes are set up in their own method
+        # to keep route registration organized.
+        self._setup_animation_routes()
         self._register_error_recovery()
 
     def _setup_routes(self):
@@ -146,7 +149,8 @@ class Live2DFlaskApp:
                     raise ValidationError(f"Invalid parameter type or value: {e}")
 
                 # Execute animation with fallback
-                result = asyncio.run(
+                # Run the async animation execution safely from sync context.
+                result = self._run_coro_sync(
                     self._execute_animation_with_fallback(
                         expression, intensity, duration, priority, sync_with_audio
                     )
@@ -168,6 +172,44 @@ class Live2DFlaskApp:
                     e, component="web_server", operation="animate"
                 )
                 return jsonify({"error": "Internal server error"}), 500
+
+    def _run_coro_sync(self, coro):
+        """Run coroutine from sync context safely, handling existing event loop.
+
+        This helper will detect if there's an already running event loop
+        (for example when using the Flask dev server with reloader tools)
+        and will run the coroutine in a new temporary loop in a thread if
+        necessary. Otherwise it will use asyncio.run.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # Running loop exists; schedule work in a new thread to avoid
+            # "asyncio.run() cannot be called from a running event loop" errors.
+            result_holder = {}
+
+            def _thread_target():
+                try:
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    result_holder["result"] = new_loop.run_until_complete(coro)
+                    new_loop.close()
+                except Exception as thread_exc:
+                    result_holder["error"] = thread_exc
+
+            t = threading.Thread(target=_thread_target)
+            t.start()
+            t.join()
+
+            if "error" in result_holder:
+                raise result_holder["error"]
+
+            return result_holder.get("result")
+        else:
+            return asyncio.run(coro)
 
         async def _execute_animation_with_fallback(
             self,
