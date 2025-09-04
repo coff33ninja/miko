@@ -4,6 +4,7 @@ flask>=3.0.0
 aiohttp
 async-timeout
 requests>=2.31.0
+websockets==12.0
 
 # LiveKit dependencies
 livekit>=0.10.0

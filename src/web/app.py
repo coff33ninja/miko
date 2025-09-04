@@ -27,7 +27,12 @@ from web.websocket_manager import (
     AnimationEventType,
 )
 from web.animation_sync import get_animation_synchronizer, AnimationPriority
-from error_handling.exceptions import Live2DError, NetworkError, ValidationError
+from error_handling.exceptions import (
+    Live2DError,
+    NetworkError,
+    ValidationError,
+    LiveKitError,
+)
 from error_handling.fallback_manager import get_fallback_manager, FallbackStrategy
 from error_handling.error_recovery import get_recovery_manager, RecoveryStrategy
 from error_handling.logging_handler import get_error_logger
