@@ -177,12 +177,14 @@ class WebSocketAnimationClient {
             
             // Handle message based on type
             if (this.eventHandlers[messageType]) {
-                // Log message receipt
+                // Log message receipt with enhanced details
                 console.debug(`Received ${messageType} message:`, {
                     timestamp: new Date().toISOString(),
                     type: messageType,
                     size: event.data.length,
-                    hasPayload: !!data.event || !!data.data
+                    hasPayload: !!data.event || !!data.data,
+                    eventType: data.event?.event_type?.value || data.event?.event_type,
+                    sequenceId: data.event?.sequence_id
                 });
                 
                 // Process message
@@ -232,10 +234,44 @@ class WebSocketAnimationClient {
         }
         
         // Validate event_type
-        if (event.event_type && typeof event.event_type === 'object') {
-            if (!event.event_type.type || !event.event_type.value) {
-                throw new Error('Invalid animation_event: Malformed event_type');
+        const eventType = event.event_type;
+        if (typeof eventType === 'object') {
+            // New format with type information
+            if (!eventType.type || !eventType.value || !eventType.name) {
+                throw new Error('Invalid animation_event: Malformed event_type object');
             }
+            // Validate that it's an AnimationEventType
+            if (eventType.type !== 'AnimationEventType') {
+                throw new Error(`Invalid animation_event: Unexpected event type ${eventType.type}`);
+            }
+            // Validate the value is one of the expected types
+            const validTypes = [
+                'expression_change',
+                'mouth_sync_start',
+                'mouth_sync_update',
+                'mouth_sync_stop',
+                'animation_queue',
+                'parameter_update',
+                'sync_timing'
+            ];
+            if (!validTypes.includes(eventType.value)) {
+                throw new Error(`Invalid animation_event: Unknown event type value ${eventType.value}`);
+            }
+        } else if (typeof eventType === 'string') {
+            // Legacy format - direct string value
+            console.warn('Received legacy format event_type, expecting object in future');
+        } else {
+            throw new Error('Invalid animation_event: event_type must be object or string');
+        }
+        
+        // Validate timestamp
+        if (typeof event.timestamp !== 'number') {
+            throw new Error('Invalid animation_event: timestamp must be a number');
+        }
+        
+        // Validate data
+        if (!event.data || typeof event.data !== 'object') {
+            throw new Error('Invalid animation_event: data must be an object');
         }
     }
     
@@ -369,7 +405,8 @@ class WebSocketAnimationClient {
      */
     async handleAnimationEvent(data) {
         const event = data.event;
-        const eventType = event.event_type;
+        // Handle the new type format where event_type is an object
+        const eventType = event.event_type?.value || event.event_type;
         
         console.log(`Received animation event: ${eventType}`, event);
         
@@ -417,22 +454,60 @@ class WebSocketAnimationClient {
      * Handle expression change event
      */
     async handleExpressionChange(event) {
-        const { expression, intensity, duration, transition, interrupt_current } = event.data;
-        
-        // Interrupt current animation if requested
-        if (interrupt_current && this.live2d.isAnimating) {
-            console.log('Interrupting current animation for new expression');
+        try {
+            const { expression, intensity, duration, transition, interrupt_current } = event.data;
+            
+            // Validate required parameters
+            if (!expression || typeof intensity !== 'number' || typeof duration !== 'number') {
+                throw new Error(`Invalid expression change parameters: expression=${expression}, intensity=${intensity}, duration=${duration}`);
+            }
+            
+            console.debug('Processing expression change:', {
+                expression,
+                intensity,
+                duration,
+                hasTransition: !!transition,
+                interruptCurrent: !!interrupt_current,
+                sequenceId: event.sequence_id
+            });
+            
+            // Interrupt current animation if requested
+            if (interrupt_current && this.live2d.isAnimating) {
+                console.log('Interrupting current animation for new expression');
+                await this.live2d.stopCurrentAnimation();
+            }
+            
+            // Apply transition if specified
+            if (transition) {
+                await this.applyExpressionTransition(transition);
+            } else {
+                // Direct expression change
+                await this.live2d.triggerAnimation(expression, intensity, duration);
+            }
+            
+            console.log(`Expression changed to: ${expression} (${intensity}, ${duration}s)`);
+            
+            // Dispatch success event
+            this.dispatchEvent('expressionChanged', {
+                expression,
+                intensity,
+                duration,
+                sequenceId: event.sequence_id
+            });
+            
+        } catch (error) {
+            console.error('Error handling expression change:', error);
+            
+            // Dispatch error event
+            this.dispatchEvent('expressionError', {
+                error: error.message,
+                eventData: event,
+                sequenceId: event.sequence_id
+            });
+            
+            // Re-throw for global handler
+            throw error;
         }
-        
-        // Apply transition if specified
-        if (transition) {
-            await this.applyExpressionTransition(transition);
-        } else {
-            // Direct expression change
-            await this.live2d.triggerAnimation(expression, intensity, duration);
-        }
-        
-        console.log(`Expression changed to: ${expression} (${intensity}, ${duration}s)`);
     }
     
     /**
