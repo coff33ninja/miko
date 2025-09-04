@@ -892,7 +892,7 @@
             timestamp: Date.now()
           }));
           
-          await room.localParticipant.publishData(data, LiveKit.DataPacket_Kind.RELIABLE);
+          await room.localParticipant.publishData(data, LivekitClient.DataPacket_Kind.RELIABLE);
           
           // Clear input
           textInput.value = '';
@@ -1162,9 +1162,9 @@
           const tokenData = await response.json();
 
           // Connect to LiveKit room
-          room = new LiveKit.Room();
+          room = new LivekitClient.Room();
 
-          room.on(LiveKit.RoomEvent.Connected, () => {
+          room.on(LivekitClient.RoomEvent.Connected, () => {
             isConnected = true;
             updateConnectionStatus("Connected", "connected");
             connectBtn.disabled = true;
@@ -1183,7 +1183,7 @@
             updateParticipantsList();
           });
 
-          room.on(LiveKit.RoomEvent.Disconnected, () => {
+          room.on(LivekitClient.RoomEvent.Disconnected, () => {
             isConnected = false;
             updateConnectionStatus("Disconnected", "status");
             connectBtn.disabled = false;
@@ -1195,7 +1195,7 @@
             addChatMessage("system", "Disconnected from LiveKit room");
           });
 
-          room.on(LiveKit.RoomEvent.ParticipantConnected, (participant) => {
+          room.on(LivekitClient.RoomEvent.ParticipantConnected, (participant) => {
             participants.set(participant.sid, {
               identity: participant.identity,
               isLocal: false,
@@ -1206,13 +1206,13 @@
             addChatMessage("system", `${participant.identity} joined the room`);
           });
 
-          room.on(LiveKit.RoomEvent.ParticipantDisconnected, (participant) => {
+          room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
             participants.delete(participant.sid);
             updateParticipantsList();
             addChatMessage("system", `${participant.identity} left the room`);
           });
 
-          room.on(LiveKit.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+          room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, (speakers) => {
             // Reset all speaking states
             participants.forEach(p => p.isSpeaking = false);
             
@@ -1226,11 +1226,11 @@
             updateParticipantsList();
           });
 
-          room.on(LiveKit.RoomEvent.AudioPlaybackStatusChanged, () => {
+          room.on(LivekitClient.RoomEvent.AudioPlaybackStatusChanged, () => {
             updateConnectionQuality(room.engine.connectionQuality);
           });
 
-          room.on(LiveKit.RoomEvent.DataReceived, (payload, participant) => {
+          room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant) => {
             try {
               const data = JSON.parse(new TextDecoder().decode(payload));
               
@@ -1251,8 +1251,8 @@
             }
           });
 
-          room.on(LiveKit.RoomEvent.LocalTrackPublished, (publication, participant) => {
-            if (publication.kind === LiveKit.Track.Kind.Audio) {
+          room.on(LivekitClient.RoomEvent.LocalTrackPublished, (publication, participant) => {
+            if (publication.kind === LivekitClient.Track.Kind.Audio) {
               const participant_data = participants.get(participant.sid);
               if (participant_data) {
                 participant_data.isMicrophoneEnabled = true;
@@ -1261,8 +1261,8 @@
             }
           });
 
-          room.on(LiveKit.RoomEvent.LocalTrackUnpublished, (publication, participant) => {
-            if (publication.kind === LiveKit.Track.Kind.Audio) {
+          room.on(LivekitClient.RoomEvent.LocalTrackUnpublished, (publication, participant) => {
+            if (publication.kind === LivekitClient.Track.Kind.Audio) {
               const participant_data = participants.get(participant.sid);
               if (participant_data) {
                 participant_data.isMicrophoneEnabled = false;

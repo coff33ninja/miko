@@ -112,7 +112,7 @@ class WebSocketAnimationManager:
             self.logger.info(f"Starting WebSocket server on {self.host}:{self.port}")
 
             self.server = await websockets.serve(
-                self._handle_client_connection,
+                lambda websocket, path: self._handle_client_connection(websocket, path),
                 self.host,
                 self.port,
                 ping_interval=20,

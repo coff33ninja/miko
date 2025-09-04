@@ -91,13 +91,26 @@ class Live2DFlaskApp:
             """API endpoint for triggering Live2D expressions with comprehensive error handling."""
             try:
                 # Validate and parse request data
-                data = self._validate_animation_request(request)
+                data = request.get_json(force=True, silent=True)
+                if data is None:
+                    raise ValidationError("No JSON data provided")
 
-                expression = data["expression"]
-                intensity = data["intensity"]
-                duration = data["duration"]
-                priority = data["priority"]
+                expression = data.get("expression")
+                intensity = data.get("intensity")
+                duration = data.get("duration")
+                priority = data.get("priority")
                 sync_with_audio = data.get("sync_with_audio", False)
+
+                if not all([expression, intensity, duration, priority]):
+                    raise ValidationError("Missing required animation parameters")
+
+                # Ensure correct types
+                try:
+                    intensity = float(intensity)
+                    duration = float(duration)
+                    priority = AnimationPriority[priority.upper()]
+                except (ValueError, KeyError) as e:
+                    raise ValidationError(f"Invalid parameter type or value: {e}")
 
                 # Execute animation with fallback
                 result = asyncio.run(
@@ -117,52 +130,12 @@ class Live2DFlaskApp:
                 return jsonify({"error": str(e), "error_type": "validation"}), 400
             except Exception as e:
                 self.consecutive_failures += 1
+                logger.exception("Error in animate endpoint:") # Added for debugging
                 self.error_logger.log_error(
                     e, component="web_server", operation="animate"
                 )
                 return jsonify({"error": "Internal server error"}), 500
 
-        def _validate_animation_request(self, request) -> Dict[str, Any]:
-            """Validate animation request parameters."""
-            data = request.get_json(force=True, silent=True)
-            if data is None:
-                raise ValidationError("No JSON data provided")
-
-            expression = data.get("expression", "neutral")
-
-            try:
-                intensity = float(data.get("intensity", 0.5))
-                duration = float(data.get("duration", 1.0))
-            except (ValueError, TypeError):
-                raise ValidationError("Intensity and duration must be numeric")
-
-            priority = data.get("priority", "normal")
-
-            # Validate ranges
-            if intensity < 0.0 or intensity > 1.0:
-                raise ValidationError("Intensity must be between 0.0 and 1.0")
-
-            if duration < 0.1 or duration > 10.0:
-                raise ValidationError("Duration must be between 0.1 and 10.0 seconds")
-
-            # Map priority string to enum
-            priority_map = {
-                "low": AnimationPriority.LOW,
-                "normal": AnimationPriority.NORMAL,
-                "high": AnimationPriority.HIGH,
-                "critical": AnimationPriority.CRITICAL,
-            }
-            animation_priority = priority_map.get(
-                priority.lower(), AnimationPriority.NORMAL
-            )
-
-            return {
-                "expression": expression,
-                "intensity": intensity,
-                "duration": duration,
-                "priority": animation_priority,
-                "sync_with_audio": data.get("sync_with_audio", False),
-            }
 
         async def _execute_animation_with_fallback(
             self,
