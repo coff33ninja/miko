@@ -198,7 +198,7 @@ class Live2DFlaskApp:
                             self.websocket_loop,
                         )
                         sequence_id = await asyncio.wait_for(
-                            asyncio.wrap_future(future), timeout=2.0
+                            asyncio.wrap_future(future), timeout=5.0
                         )
 
                         self.websocket_healthy = True

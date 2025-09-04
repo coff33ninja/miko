@@ -126,3 +126,4 @@ k8s/secrets/
 mem0_data/
 livekit_data/
 ollama_models/
+/Livekit_template
