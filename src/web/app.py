@@ -689,13 +689,14 @@ class Live2DFlaskApp:
                 self.websocket_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self.websocket_loop)
 
-                # Configure WebSocket server
-                ws_host = "127.0.0.1"  # self.settings.flask.host
-                ws_port = 8765  # Use port+1000 for WebSocket
+                # Configure WebSocket server to listen on the same interface as Flask
+                ws_host = self.settings.flask.host or "0.0.0.0"  # Use same host as Flask, default to all interfaces
+                ws_port = 8765  # WebSocket port
 
-                # Start WebSocket manager
+                # Start WebSocket manager with proper host binding
                 self.websocket_manager.host = ws_host
                 self.websocket_manager.port = ws_port
+                logger.info(f"Configuring WebSocket server on {ws_host}:{ws_port}")
                 self.websocket_loop.run_until_complete(
                     self.websocket_manager.start_server()
                 )

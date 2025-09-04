@@ -110,13 +110,17 @@ class WebSocketAnimationManager:
         try:
             self.logger.info(f"Starting WebSocket server on {self.host}:{self.port}")
 
+            # Create server with more permissive settings
             self.server = await websockets.serve(
                 lambda websocket, path: self._handle_client_connection(websocket, path),
                 self.host,
                 self.port,
                 ping_interval=20,
-                ping_timeout=10,
-                close_timeout=10,
+                ping_timeout=60,  # Increased timeout
+                max_size=10 * 1024 * 1024,  # 10MB max message size
+                compression=None,  # Disable compression for better compatibility
+                extensions=[],  # No extensions for better compatibility
+                logger=self.logger
             )
 
             self.is_running = True
