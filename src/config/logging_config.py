@@ -16,6 +16,7 @@ from dataclasses import dataclass, asdict
 @dataclass
 class LogEvent:
     """Structured log event for important system events."""
+
     timestamp: str
     event_type: str
     level: str
@@ -28,38 +29,39 @@ class LogEvent:
 
 class ContentFilterLogger:
     """Specialized logger for content filtering incidents."""
-    
+
     def __init__(self, logger_name: str = "content_filter"):
         self.logger = logging.getLogger(logger_name)
         self._setup_content_filter_handler()
-    
+
     def _setup_content_filter_handler(self) -> None:
         """Set up dedicated handler for content filtering logs."""
         # Create logs directory if it doesn't exist
         os.makedirs("logs", exist_ok=True)
-        
+
         # Create rotating file handler for content filter logs
         handler = logging.handlers.RotatingFileHandler(
             "logs/content_filter.log",
-            maxBytes=10*1024*1024,  # 10MB
+            maxBytes=10 * 1024 * 1024,  # 10MB
             backupCount=5,
-            encoding="utf-8"
+            encoding="utf-8",
         )
-        
+
         # JSON formatter for structured logging
         formatter = logging.Formatter(
             '{"timestamp": "%(asctime)s", "level": "%(levelname)s", '
             '"component": "content_filter", "message": %(message)s}'
         )
         handler.setFormatter(formatter)
-        
+
         self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
-    
-    def log_filter_incident(self, user_id: str, provider: str, reason: str, 
-                          session_id: Optional[str] = None) -> None:
+
+    def log_filter_incident(
+        self, user_id: str, provider: str, reason: str, session_id: Optional[str] = None
+    ) -> None:
         """Log content filtering incident without storing inappropriate content.
-        
+
         Args:
             user_id: User identifier
             provider: AI provider that triggered filtering (gemini/ollama)
@@ -77,45 +79,46 @@ class ContentFilterLogger:
             metadata={
                 "provider": provider,
                 "reason": reason,
-                "action": "request_rejected"
-            }
+                "action": "request_rejected",
+            },
         )
-        
+
         # Log as JSON without the actual content
         self.logger.warning(json.dumps(asdict(event)))
 
 
 class SystemEventLogger:
     """Logger for system events like API key rotation, errors, etc."""
-    
+
     def __init__(self, logger_name: str = "system_events"):
         self.logger = logging.getLogger(logger_name)
         self._setup_system_handler()
-    
+
     def _setup_system_handler(self) -> None:
         """Set up handler for system event logs."""
         os.makedirs("logs", exist_ok=True)
-        
+
         handler = logging.handlers.RotatingFileHandler(
             "logs/system_events.log",
-            maxBytes=10*1024*1024,  # 10MB
+            maxBytes=10 * 1024 * 1024,  # 10MB
             backupCount=5,
-            encoding="utf-8"
+            encoding="utf-8",
         )
-        
+
         formatter = logging.Formatter(
             '{"timestamp": "%(asctime)s", "level": "%(levelname)s", '
             '"component": "system", "message": %(message)s}'
         )
         handler.setFormatter(formatter)
-        
+
         self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
-    
-    def log_api_key_rotation(self, provider: str, old_index: int, new_index: int,
-                           reason: str = "rate_limit") -> None:
+
+    def log_api_key_rotation(
+        self, provider: str, old_index: int, new_index: int, reason: str = "rate_limit"
+    ) -> None:
         """Log API key rotation event.
-        
+
         Args:
             provider: AI provider (e.g., "gemini")
             old_index: Previous key index
@@ -132,16 +135,21 @@ class SystemEventLogger:
                 "provider": provider,
                 "old_key_index": old_index,
                 "new_key_index": new_index,
-                "reason": reason
-            }
+                "reason": reason,
+            },
         )
-        
+
         self.logger.info(json.dumps(asdict(event)))
-    
-    def log_provider_error(self, provider: str, error_type: str, error_message: str,
-                          user_id: Optional[str] = None) -> None:
+
+    def log_provider_error(
+        self,
+        provider: str,
+        error_type: str,
+        error_message: str,
+        user_id: Optional[str] = None,
+    ) -> None:
         """Log AI provider error.
-        
+
         Args:
             provider: AI provider name
             error_type: Type of error (e.g., "connection_error", "rate_limit")
@@ -155,18 +163,20 @@ class SystemEventLogger:
             message=f"AI provider error: {error_message}",
             component="ai_provider",
             user_id=user_id,
-            metadata={
-                "provider": provider,
-                "error_type": error_type
-            }
+            metadata={"provider": provider, "error_type": error_type},
         )
-        
+
         self.logger.error(json.dumps(asdict(event)))
-    
-    def log_memory_operation(self, operation: str, user_id: str, success: bool,
-                           details: Optional[Dict[str, Any]] = None) -> None:
+
+    def log_memory_operation(
+        self,
+        operation: str,
+        user_id: str,
+        success: bool,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Log memory operation (store/retrieve).
-        
+
         Args:
             operation: Operation type (e.g., "store", "retrieve", "search")
             user_id: User identifier
@@ -180,68 +190,64 @@ class SystemEventLogger:
             message=f"Memory {operation} {'succeeded' if success else 'failed'}",
             component="memory_manager",
             user_id=user_id,
-            metadata={
-                "operation": operation,
-                "success": success,
-                **(details or {})
-            }
+            metadata={"operation": operation, "success": success, **(details or {})},
         )
-        
+
         level_method = self.logger.info if success else self.logger.warning
         level_method(json.dumps(asdict(event)))
 
 
 def setup_application_logging(log_level: str = "INFO", debug: bool = False) -> None:
     """Set up application-wide logging configuration.
-    
+
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         debug: Enable debug mode with more verbose logging
     """
     # Create logs directory
     os.makedirs("logs", exist_ok=True)
-    
+
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper()))
-    
+
     # Clear existing handlers
     root_logger.handlers.clear()
-    
+
     # Console handler
     console_handler = logging.StreamHandler()
     console_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     console_handler.setFormatter(console_formatter)
-    if hasattr(console_handler.stream, 'reconfigure'):
+    if hasattr(console_handler.stream, "reconfigure"):
         try:
-            console_handler.stream.reconfigure(encoding='utf-8')
+            console_handler.stream.reconfigure(encoding="utf-8")
         except TypeError:
-            pass # In some environments, reconfigure might not accept encoding
+            pass  # In some environments, reconfigure might not accept encoding
     root_logger.addHandler(console_handler)
-    
+
     # File handler for general application logs
     file_handler = logging.handlers.RotatingFileHandler(
         "logs/application.log",
-        maxBytes=10*1024*1024,  # 10MB
+        maxBytes=10 * 1024 * 1024,  # 10MB
         backupCount=5,
-        encoding="utf-8"
+        encoding="utf-8",
     )
-    
+
     if debug:
         # More detailed format for debug mode
         file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
+            "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
         )
     else:
         file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
-    
+
     file_handler.setFormatter(file_formatter)
     root_logger.addHandler(file_handler)
-    
+
     # Set specific logger levels
     if debug:
         # More verbose logging in debug mode

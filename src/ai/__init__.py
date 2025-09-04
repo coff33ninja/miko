@@ -10,12 +10,12 @@ from .provider_factory import ProviderFactory
 from .personality_processor import PersonalityProcessor, ProcessedResponse, Sentiment
 
 __all__ = [
-    'AIProvider',
-    'Message',
-    'OllamaProvider', 
-    'GeminiProvider',
-    'ProviderFactory',
-    'PersonalityProcessor',
-    'ProcessedResponse',
-    'Sentiment'
+    "AIProvider",
+    "Message",
+    "OllamaProvider",
+    "GeminiProvider",
+    "ProviderFactory",
+    "PersonalityProcessor",
+    "ProcessedResponse",
+    "Sentiment",
 ]

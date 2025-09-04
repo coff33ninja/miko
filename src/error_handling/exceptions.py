@@ -10,11 +10,16 @@ from typing import Optional, Dict, Any
 
 class AnimeAIError(Exception):
     """Base exception for all Anime AI Character system errors."""
-    
-    def __init__(self, message: str, error_code: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        error_code: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize base error.
-        
+
         Args:
             message: Error message
             error_code: Optional error code for categorization
@@ -24,26 +29,32 @@ class AnimeAIError(Exception):
         self.message = message
         self.error_code = error_code
         self.details = details or {}
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert error to dictionary for logging/serialization."""
         return {
-            'error_type': self.__class__.__name__,
-            'message': self.message,
-            'error_code': self.error_code,
-            'details': self.details
+            "error_type": self.__class__.__name__,
+            "message": self.message,
+            "error_code": self.error_code,
+            "details": self.details,
         }
 
 
 class AIProviderError(AnimeAIError):
     """Errors related to AI provider operations."""
-    
-    def __init__(self, message: str, provider: str, error_code: Optional[str] = None, 
-                 is_rate_limit: bool = False, is_content_filter: bool = False, 
-                 details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        provider: str,
+        error_code: Optional[str] = None,
+        is_rate_limit: bool = False,
+        is_content_filter: bool = False,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize AI provider error.
-        
+
         Args:
             message: Error message
             provider: AI provider name ('ollama', 'gemini')
@@ -60,12 +71,18 @@ class AIProviderError(AnimeAIError):
 
 class MemoryError(AnimeAIError):
     """Errors related to memory management operations."""
-    
-    def __init__(self, message: str, operation: str, user_id: Optional[str] = None,
-                 is_mem0_error: bool = False, details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        operation: str,
+        user_id: Optional[str] = None,
+        is_mem0_error: bool = False,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize memory error.
-        
+
         Args:
             message: Error message
             operation: Memory operation that failed
@@ -81,13 +98,19 @@ class MemoryError(AnimeAIError):
 
 class LiveKitError(AnimeAIError):
     """Errors related to LiveKit operations."""
-    
-    def __init__(self, message: str, operation: str, room_name: Optional[str] = None,
-                 participant_id: Optional[str] = None, is_connection_error: bool = False,
-                 details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        operation: str,
+        room_name: Optional[str] = None,
+        participant_id: Optional[str] = None,
+        is_connection_error: bool = False,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize LiveKit error.
-        
+
         Args:
             message: Error message
             operation: LiveKit operation that failed
@@ -105,13 +128,19 @@ class LiveKitError(AnimeAIError):
 
 class Live2DError(AnimeAIError):
     """Errors related to Live2D operations."""
-    
-    def __init__(self, message: str, operation: str, model_path: Optional[str] = None,
-                 animation_type: Optional[str] = None, is_rendering_error: bool = False,
-                 details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        operation: str,
+        model_path: Optional[str] = None,
+        animation_type: Optional[str] = None,
+        is_rendering_error: bool = False,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize Live2D error.
-        
+
         Args:
             message: Error message
             operation: Live2D operation that failed
@@ -129,12 +158,17 @@ class Live2DError(AnimeAIError):
 
 class ConfigurationError(AnimeAIError):
     """Errors related to system configuration."""
-    
-    def __init__(self, message: str, config_key: Optional[str] = None,
-                 config_file: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        config_key: Optional[str] = None,
+        config_file: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize configuration error.
-        
+
         Args:
             message: Error message
             config_key: Configuration key that caused the error
@@ -148,12 +182,18 @@ class ConfigurationError(AnimeAIError):
 
 class ContentFilterError(AnimeAIError):
     """Errors related to content filtering."""
-    
-    def __init__(self, message: str, provider: str, filter_type: str,
-                 user_id: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        provider: str,
+        filter_type: str,
+        user_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize content filter error.
-        
+
         Args:
             message: Error message
             provider: AI provider that triggered the filter
@@ -169,13 +209,19 @@ class ContentFilterError(AnimeAIError):
 
 class NetworkError(AnimeAIError):
     """Errors related to network operations."""
-    
-    def __init__(self, message: str, operation: str, endpoint: Optional[str] = None,
-                 status_code: Optional[int] = None, is_timeout: bool = False,
-                 details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        operation: str,
+        endpoint: Optional[str] = None,
+        status_code: Optional[int] = None,
+        is_timeout: bool = False,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize network error.
-        
+
         Args:
             message: Error message
             operation: Network operation that failed
@@ -193,13 +239,18 @@ class NetworkError(AnimeAIError):
 
 class ValidationError(AnimeAIError):
     """Errors related to input validation."""
-    
-    def __init__(self, message: str, field: Optional[str] = None,
-                 value: Optional[Any] = None, expected_type: Optional[str] = None,
-                 details: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self,
+        message: str,
+        field: Optional[str] = None,
+        value: Optional[Any] = None,
+        expected_type: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize validation error.
-        
+
         Args:
             message: Error message
             field: Field name that failed validation
