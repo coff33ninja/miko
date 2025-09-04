@@ -63,7 +63,7 @@ class WebSocketAnimationClient {
     }
     
     /**
-     * Connect to WebSocket server
+     * Connect to WebSocket server with enhanced connection handling
      */
     async connect() {
         if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
@@ -74,15 +74,58 @@ class WebSocketAnimationClient {
         try {
             console.log(`Connecting to WebSocket server: ${this.wsUrl}`);
             
+            // Reset connection state
+            this.intentionalClose = false;
+            this.lastError = null;
+            this.connectionStartTime = Date.now();
+            
+            // Create WebSocket with error handling
             this.ws = new WebSocket(this.wsUrl);
             
-            this.ws.onopen = this.handleOpen.bind(this);
-            this.ws.onmessage = this.handleMessage.bind(this);
-            this.ws.onclose = this.handleClose.bind(this);
-            this.ws.onerror = this.handleError.bind(this);
+            // Set connection timeout
+            this.connectionTimeout = setTimeout(() => {
+                if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+                    console.error('WebSocket connection timeout');
+                    this.ws.close(4000, 'Connection timeout');
+                    this.handleError(new Error('Connection timeout'));
+                }
+            }, 10000); // 10 second timeout
+            
+            // Add event listeners
+            this.ws.onopen = (event) => {
+                clearTimeout(this.connectionTimeout);
+                this.handleOpen(event);
+            };
+            
+            this.ws.onmessage = (event) => {
+                try {
+                    this.handleMessage(event);
+                } catch (error) {
+                    console.error('Error handling message:', error);
+                    this.handleError(error);
+                }
+            };
+            
+            this.ws.onclose = (event) => {
+                clearTimeout(this.connectionTimeout);
+                this.handleClose(event);
+            };
+            
+            this.ws.onerror = (error) => {
+                clearTimeout(this.connectionTimeout);
+                this.handleError(error);
+            };
+            
+            // Log connection attempt
+            console.debug('WebSocket connection attempt:', {
+                url: this.wsUrl,
+                timestamp: new Date().toISOString(),
+                reconnectAttempts: this.reconnectAttempts
+            });
             
         } catch (error) {
             console.error('Failed to create WebSocket connection:', error);
+            this.handleError(error);
             this.scheduleReconnect();
         }
     }
@@ -104,21 +147,115 @@ class WebSocketAnimationClient {
     }
     
     /**
-     * Handle incoming WebSocket messages
+     * Handle incoming WebSocket messages with improved error handling and type validation
      */
     handleMessage(event) {
         try {
-            const data = JSON.parse(event.data);
-            const messageType = data.type;
+            // Store raw message for debugging
+            this.lastReceivedMessage = {
+                timestamp: Date.now(),
+                data: event.data
+            };
             
+            // Parse JSON with type validation
+            const data = JSON.parse(event.data);
+            
+            // Validate message structure
+            if (!data || typeof data !== 'object') {
+                throw new Error('Invalid message format: Expected object');
+            }
+            
+            const messageType = data.type;
+            if (!messageType || typeof messageType !== 'string') {
+                throw new Error('Invalid message format: Missing or invalid type');
+            }
+            
+            // Special handling for animation events
+            if (messageType === 'animation_event') {
+                this._validateAnimationEvent(data);
+            }
+            
+            // Handle message based on type
             if (this.eventHandlers[messageType]) {
+                // Log message receipt
+                console.debug(`Received ${messageType} message:`, {
+                    timestamp: new Date().toISOString(),
+                    type: messageType,
+                    size: event.data.length,
+                    hasPayload: !!data.event || !!data.data
+                });
+                
+                // Process message
                 this.eventHandlers[messageType](data);
+                
+                // Update connection health metrics
+                this._updateConnectionHealth(true);
             } else {
-                console.warn(`Unknown WebSocket message type: ${messageType}`);
+                console.warn(`Unknown WebSocket message type: ${messageType}`, data);
             }
             
         } catch (error) {
-            console.error('Error parsing WebSocket message:', error);
+            console.error('Error handling WebSocket message:', error);
+            
+            // Log problematic message for debugging
+            console.debug('Problematic message:', {
+                raw: event.data,
+                timestamp: new Date().toISOString(),
+                error: error.message
+            });
+            
+            // Update connection health metrics
+            this._updateConnectionHealth(false);
+            
+            // Dispatch error event
+            this.dispatchEvent('messageError', {
+                error: error,
+                rawMessage: event.data
+            });
+        }
+    }
+    
+    /**
+     * Validate animation event structure
+     */
+    _validateAnimationEvent(data) {
+        const event = data.event;
+        if (!event) {
+            throw new Error('Invalid animation_event: Missing event data');
+        }
+        
+        const requiredFields = ['event_type', 'timestamp', 'data'];
+        const missingFields = requiredFields.filter(field => !(field in event));
+        
+        if (missingFields.length > 0) {
+            throw new Error(`Invalid animation_event: Missing required fields: ${missingFields.join(', ')}`);
+        }
+        
+        // Validate event_type
+        if (event.event_type && typeof event.event_type === 'object') {
+            if (!event.event_type.type || !event.event_type.value) {
+                throw new Error('Invalid animation_event: Malformed event_type');
+            }
+        }
+    }
+    
+    /**
+     * Update connection health metrics
+     */
+    _updateConnectionHealth(success) {
+        const now = Date.now();
+        
+        if (success) {
+            this.lastSuccessfulMessage = now;
+            this.consecutiveErrors = 0;
+        } else {
+            this.consecutiveErrors = (this.consecutiveErrors || 0) + 1;
+            
+            // Consider reconnection if too many consecutive errors
+            if (this.consecutiveErrors > 5) {
+                console.warn('Too many consecutive message errors - considering reconnection');
+                this.scheduleReconnect();
+            }
         }
     }
     
@@ -140,13 +277,39 @@ class WebSocketAnimationClient {
     }
     
     /**
-     * Handle WebSocket errors
+     * Handle WebSocket errors with improved error recovery
      */
     handleError(error) {
         console.error('WebSocket error:', error);
         
-        // Dispatch error event
-        this.dispatchEvent('websocketError', { error });
+        // Log detailed error information
+        const errorInfo = {
+            error: error,
+            timestamp: new Date().toISOString(),
+            connectionState: this.getConnectionStatus(),
+            lastMessage: this.lastReceivedMessage,
+            lastPingTime: this.lastPingTime
+        };
+        
+        console.debug('WebSocket error details:', errorInfo);
+        
+        // Dispatch error event with detailed info
+        this.dispatchEvent('websocketError', errorInfo);
+        
+        // Check if we should attempt reconnection
+        if (this.isConnected && !this.intentionalClose) {
+            console.log('Unexpected error - scheduling reconnection...');
+            this.scheduleReconnect();
+        }
+        
+        // Notify any active animations of the error
+        if (this.currentSequence) {
+            this.dispatchEvent('animationError', {
+                sequenceId: this.currentSequence,
+                error: error,
+                recovery: 'attempting_reconnect'
+            });
+        }
     }
     
     /**
