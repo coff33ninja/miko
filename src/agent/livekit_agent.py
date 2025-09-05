@@ -33,18 +33,19 @@ from livekit.plugins import openai, silero, deepgram
 # --------------------------------------------------------------
 # Project‑specific modules
 # --------------------------------------------------------------
-from ..config.settings import AppConfig, load_config
-from ..ai.provider_factory import ProviderFactory
-from ..memory.memory_manager import MemoryManager, ConversationMessage
-from ..web.app import trigger_animation
-from ..web.animation_sync import (
+from config.settings import AppConfig, load_config
+from ai.provider_factory import ProviderFactory
+from memory.memory_manager import MemoryManager, ConversationMessage
+from web.app import trigger_animation
+from web.animation_sync import (
     get_animation_synchronizer,
     AnimationPriority,
 )
-from ..error_handling.exceptions import LiveKitError, AIProviderError, MemoryError
-from ..error_handling.fallback_manager import get_fallback_manager, FallbackStrategy, FallbackResult, FallbackManager  # noqa: F401
-from ..error_handling.error_recovery import get_recovery_manager, RecoveryStrategy, ErrorRecoveryManager  # noqa: F401
-from ..error_handling.logging_handler import get_error_logger
+from error_handling.exceptions import LiveKitError, AIProviderError, MemoryError
+from error_handling.fallback_manager import get_fallback_manager, FallbackStrategy, FallbackResult, FallbackManager  # noqa: F401
+from error_handling.error_recovery import get_recovery_manager, RecoveryStrategy, ErrorRecoveryManager  # noqa: F401
+from error_handling.logging_handler import get_error_logger
+
 
 # --------------------------------------------------------------
 # Simple alias – makes the intent clearer in the rest of the file
