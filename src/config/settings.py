@@ -189,7 +189,7 @@ class ConfigManager:
 
             # Live2D configuration
             live2d_config = Live2DConfig(
-                model_url=os.getenv("LIVE2D_MODEL_URL"),
+                model_url=os.getenv("LIVE2D_MODEL_URL") if not os.getenv("LIVE2D_MODEL_FOLDER") else None,
                 model_folder=os.getenv("LIVE2D_MODEL_FOLDER"),
                 textures_url=os.getenv(
                     "LIVE2D_TEXTURES_URL", "/static/models/textures/"

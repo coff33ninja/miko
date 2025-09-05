@@ -24,8 +24,13 @@ class TestConfigManager:
         env_vars_to_clear = [
             "DEBUG",
             "LOG_LEVEL",
+            "LIVE2D_TEXTURES_URL",
             "LIVE2D_MODEL_FOLDER", # Added for Live2D model folder testing
+            "GEMINI_API_KEYS", # Added to ensure clean state for AI config tests
         ]
+        for var in env_vars_to_clear:
+            if var in os.environ:
+                del os.environ[var]
         for var in env_vars_to_clear:
             if var in os.environ:
                 del os.environ[var]
@@ -39,6 +44,7 @@ class TestConfigManager:
 LIVEKIT_URL=wss://test.livekit.cloud
 LIVEKIT_API_KEY=test_key
 LIVEKIT_API_SECRET=test_secret
+USE_OLLAMA=true
 """
             )
             env_file = f.name
@@ -226,6 +232,7 @@ GEMINI_CURRENT_KEY_INDEX=1
 LIVEKIT_URL=wss://test.livekit.cloud
 LIVEKIT_API_KEY=test_key
 LIVEKIT_API_SECRET=test_secret
+USE_OLLAMA=true
 PERSONALITY_PROMPT=You are a cheerful anime idol named Aiko!
 """
             )
