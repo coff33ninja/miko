@@ -20,15 +20,15 @@ To properly implement Live2D in this project:
    ```
 
 4. Model organization:
-   Your model files should be in `/static/models/Poblanc/`:
-   - Poblanc.model3.json
-   - Poblanc.moc3
-   - Poblanc.physics3.json
+   Your model files should be in `/static/models/miara_pro_t03/`:
+   - miara_pro_t03.model3.json
+   - miara_pro_t03.moc3
+   - miara_pro_t03.physics3.json
    - expression1.exp3.json
    - Textures in a subfolder
 
 5. Update model paths:
-   The model URL should be: `/static/models/Poblanc/Poblanc.model3.json`
+   The model URL should be: `/static/models/miara_pro_t03/miara_pro_t03.model3.json`
 
 6. The Live2D Cubism SDK requires:
    - WebGL support
