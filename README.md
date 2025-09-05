@@ -201,10 +201,17 @@ PERSONALITY_PROMPT=You are a tsundere anime girl named Miko...
 
 ### Live2D Models
 
-Place your Live2D model files in `static/models/`:
+To use a Live2D model, place its entire folder (containing the `model3.json` and associated assets like `.moc3`, textures, etc.) into the `static/models/` directory.
 
-- `model.moc3` - Main model file
-- `textures/` - Texture files directory
+For example, if your model folder is `miara_pro_en`, place it at `static/models/miara_pro_en/`.
+
+Once your model is in place, use the setup script to configure its path in your `.env` file:
+
+```bash
+python scripts/setup_live2d_model.py <your_model_folder_name>
+```
+
+Replace `<your_model_folder_name>` with the name of your model's directory (e.g., `miara_pro_en`). This script will automatically find the primary `model3.json` file within your model's folder and set the `LIVE2D_MODEL_CONFIG_PATH` environment variable in your `.env` file.
 
 Free models available from:
 

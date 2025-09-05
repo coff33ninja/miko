@@ -1,4 +1,3 @@
-
 import os
 import sys
 import glob
@@ -14,16 +13,23 @@ def update_env_file(key, value):
         with open(ENV_FILE, 'r') as f:
             lines = f.readlines()
 
+    new_lines = [] # Initialized here
     found = False
+    for line in lines:
+        if line.startswith(f'{key}=') :
+            new_lines.append(f'{key}={value}\n')
+            found = True
+        else:
+            new_lines.append(line)
+
+    if not found:
+        # Ensure the last line ends with a newline before appending
+        if new_lines and not new_lines[-1].endswith('\n'):
+            new_lines[-1] += '\n'
+        new_lines.append(f'{key}={value}\n')
+
     with open(ENV_FILE, 'w') as f:
-        for line in lines:
-            if line.startswith(f'{key}=') :
-                f.write(f'{key}={value}\n')
-                found = True
-            else:
-                f.write(line)
-        if not found:
-            f.write(f'{key}={value}\n')
+        f.writelines(new_lines)
     print(f"Updated {key} in .env to: {value}")
 
 def find_model_config(model_name):
