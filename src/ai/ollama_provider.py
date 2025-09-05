@@ -17,10 +17,10 @@ try:
 except ImportError:
     ollama = None
 
-from ..error_handling.exceptions import AIProviderError, NetworkError
-from ..error_handling.fallback_manager import get_fallback_manager, FallbackStrategy
-from ..error_handling.error_recovery import get_recovery_manager, RecoveryStrategy
-from ..error_handling.logging_handler import get_error_logger
+from src.error_handling.exceptions import AIProviderError, NetworkError
+from src.error_handling.fallback_manager import get_fallback_manager, FallbackStrategy
+from src.error_handling.error_recovery import get_recovery_manager, RecoveryStrategy
+from src.error_handling.logging_handler import get_error_logger
 
 logger = logging.getLogger(__name__)
 

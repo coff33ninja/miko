@@ -13,8 +13,8 @@ from livekit import rtc
 from livekit.agents.voice import Agent as VoiceAgent
 from livekit.agents.llm import ChatContext
 
-from ..config.settings import AppConfig
-from ..memory.memory_manager import MemoryManager, ConversationMessage
+from src.config.settings import AppConfig
+from src.memory.memory_manager import MemoryManager, ConversationMessage
 
 
 class EnhancedVoiceAssistant:

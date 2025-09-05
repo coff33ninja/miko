@@ -33,18 +33,18 @@ from livekit.plugins import openai, silero, deepgram
 # --------------------------------------------------------------
 # Project‑specific modules
 # --------------------------------------------------------------
-from config.settings import AppConfig, load_config
-from ai.provider_factory import ProviderFactory
-from memory.memory_manager import MemoryManager, ConversationMessage
-from web.app import trigger_animation
-from web.animation_sync import (
+from src.config.settings import AppConfig, load_config
+from src.ai.provider_factory import ProviderFactory
+from src.memory.memory_manager import MemoryManager, ConversationMessage
+from src.web.app import trigger_animation
+from src.web.animation_sync import (
     get_animation_synchronizer,
     AnimationPriority,
 )
-from error_handling.exceptions import LiveKitError, AIProviderError, MemoryError
-from error_handling.fallback_manager import get_fallback_manager, FallbackStrategy, FallbackResult, FallbackManager  # noqa: F401
-from error_handling.error_recovery import get_recovery_manager, RecoveryStrategy, ErrorRecoveryManager  # noqa: F401
-from error_handling.logging_handler import get_error_logger
+from src.error_handling.exceptions import LiveKitError, AIProviderError, MemoryError
+from src.error_handling.fallback_manager import get_fallback_manager, FallbackStrategy, FallbackResult, FallbackManager  # noqa: F401
+from src.error_handling.error_recovery import get_recovery_manager, RecoveryStrategy, ErrorRecoveryManager  # noqa: F401
+from src.error_handling.logging_handler import get_error_logger
 
 
 # --------------------------------------------------------------
@@ -169,7 +169,7 @@ class AnimeAILLM(LLM):
             # --------------------------------------------------------------
             # 4️⃣  Convert LiveKit ChatMessage objects to the provider‑agnostic format
             # --------------------------------------------------------------
-            from ai.base_provider import (
+            from src.ai.base_provider import (
                 Message,
             )  # thin wrapper used by ProviderFactory
 

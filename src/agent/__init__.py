@@ -7,7 +7,6 @@ from .livekit_agent import AnimeAIAgent, AnimeAILLM, entrypoint
 from .voice_assistant import (
     EnhancedVoiceAssistant,
     VoiceAssistantFactory,
-    AgentEventHandler,
 )
 
 __all__ = [
@@ -15,6 +14,5 @@ __all__ = [
     "AnimeAILLM",
     "EnhancedVoiceAssistant",
     "VoiceAssistantFactory",
-    "AgentEventHandler",
     "entrypoint",
 ]

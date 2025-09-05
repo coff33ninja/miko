@@ -38,7 +38,7 @@ class MemoryContext:
 
         if self.conversation_history:
             context_parts.append("\nRecent conversation:")
-            for msg in self.conversation_history[-5:]:  # Last 5 messages
+            for msg in self.conversation_history[-5:]:
                 role_display = "You" if msg.role == "assistant" else "User"
                 context_parts.append(f"{role_display}: {msg.content}")
 
@@ -111,7 +111,7 @@ class AIProvider(ABC):
                 messages, personality, memory_context
             )
             # Create a basic ProcessedResponse-like object
-            from .personality_processor import ProcessedResponse, Sentiment
+            from src.ai.personality_processor import ProcessedResponse, Sentiment
 
             return ProcessedResponse(
                 content=raw_response,

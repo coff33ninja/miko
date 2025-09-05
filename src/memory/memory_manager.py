@@ -16,11 +16,11 @@ except ImportError:
     # Fallback for development/testing
     Memory = None
 
-from ..config.settings import MemoryConfig
-from ..error_handling.exceptions import MemoryError, NetworkError
-from ..error_handling.fallback_manager import get_fallback_manager, FallbackStrategy
-from ..error_handling.error_recovery import get_recovery_manager, RecoveryStrategy
-from ..error_handling.logging_handler import get_error_logger
+from src.config.settings import MemoryConfig
+from src.error_handling.exceptions import MemoryError, NetworkError
+from src.error_handling.fallback_manager import get_fallback_manager, FallbackStrategy
+from src.error_handling.error_recovery import get_recovery_manager, RecoveryStrategy
+from src.error_handling.logging_handler import get_error_logger
 
 
 @dataclass
@@ -75,7 +75,7 @@ class MemoryContext:
 
         if self.conversation_history:
             context_parts.append("\nRecent conversation:")
-            for msg in self.conversation_history[-5:]:  # Last 5 messages
+            for msg in self.conversation_history[-5:]:
                 role_display = "You" if msg.role == "assistant" else "User"
                 context_parts.append(f"{role_display}: {msg.content}")
 

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime, timedelta
 
-from .exceptions import AnimeAIError, AIProviderError, LiveKitError, MemoryError
+from src.error_handling.exceptions import AnimeAIError, AIProviderError, LiveKitError, MemoryError
 
 
 class RecoveryStrategy(Enum):
@@ -380,7 +380,7 @@ class ErrorRecoveryManager:
 
         try:
             # Import here to avoid circular imports
-            from ..ai.provider_factory import ProviderFactory
+            from src.ai.provider_factory import ProviderFactory
 
             provider = ProviderFactory.create_provider()
             if hasattr(provider, "rotate_api_key"):
@@ -458,8 +458,8 @@ class ErrorRecoveryManager:
     async def _reconnect_memory_service(self) -> bool:
         """Reconnect memory service."""
         try:
-            from ..memory.memory_manager import MemoryManager
-            from ..config.settings import get_settings
+            from src.memory.memory_manager import MemoryManager
+            from src.config.settings import get_settings
 
             config = get_settings()
             memory_manager = MemoryManager(config.memory)
@@ -471,7 +471,7 @@ class ErrorRecoveryManager:
     async def _reconnect_websocket(self) -> bool:
         """Reconnect WebSocket manager."""
         try:
-            from ..web.websocket_manager import get_websocket_manager
+            from src.web.websocket_manager import get_websocket_manager
 
             ws_manager = get_websocket_manager()
             await ws_manager.restart_server()
@@ -482,7 +482,7 @@ class ErrorRecoveryManager:
     async def _clear_memory_state(self) -> bool:
         """Clear memory manager state."""
         try:
-            from ..memory.memory_manager import MemoryManager
+            from src.memory.memory_manager import MemoryManager
 
             # Clear session memory (implementation would depend on MemoryManager)
             return True
@@ -492,7 +492,7 @@ class ErrorRecoveryManager:
     async def _clear_animation_state(self) -> bool:
         """Clear animation synchronizer state."""
         try:
-            from ..web.animation_sync import get_animation_synchronizer
+            from src.web.animation_sync import get_animation_synchronizer
 
             sync = get_animation_synchronizer()
             # Clear active sequences and reset state
@@ -506,8 +506,8 @@ class ErrorRecoveryManager:
     async def _reinitialize_memory_manager(self) -> bool:
         """Reinitialize memory manager."""
         try:
-            from ..memory.memory_manager import MemoryManager
-            from ..config.settings import get_settings
+            from src.memory.memory_manager import MemoryManager
+            from src.config.settings import get_settings
 
             config = get_settings()
             memory_manager = MemoryManager(config.memory)
@@ -518,7 +518,7 @@ class ErrorRecoveryManager:
     async def _reinitialize_ai_provider(self) -> bool:
         """Reinitialize AI provider."""
         try:
-            from ..ai.provider_factory import ProviderFactory
+            from src.ai.provider_factory import ProviderFactory
 
             # Force recreation of provider
             ProviderFactory._provider = None
@@ -535,7 +535,7 @@ class ErrorRecoveryManager:
     async def _reinitialize_websocket_manager(self) -> bool:
         """Reinitialize WebSocket manager."""
         try:
-            from ..web.websocket_manager import get_websocket_manager
+            from src.web.websocket_manager import get_websocket_manager
 
             ws_manager = get_websocket_manager()
             await ws_manager.stop_server()
