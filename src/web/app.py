@@ -83,42 +83,20 @@ class Live2DFlaskApp:
         self._setup_animation_routes()
 
     def _resolve_live2d_model_url(self) -> Optional[str]:
-        """Resolve the Live2D model URL based on configuration."""
-        model_folder = self.settings.live2d.model_folder
-        model_url_from_settings = self.settings.live2d.model_url
+        """Resolve the Live2D model URL based on the LIVE2D_MODEL_CONFIG_PATH environment variable."""
+        live2d_model_config_path = os.getenv('LIVE2D_MODEL_CONFIG_PATH')
 
-        if model_folder:
-            # Construct the absolute path to the static directory
-            static_dir = os.path.join(os.path.dirname(__file__), "static")
-            model_dir_abs = os.path.join(static_dir, model_folder)
-
-            if not os.path.isdir(model_dir_abs):
-                logger.error(f"Live2D model folder not found: {model_dir_abs}")
-                return None
-
-            # Search for .model3.json file within the model folder
-            model_files = glob.glob(os.path.join(model_dir_abs, "**", "*.model3.json"), recursive=True)
-
-            if not model_files:
-                logger.error(f"No .model3.json found in Live2D model folder: {model_dir_abs}")
-                return None
-            elif len(model_files) > 1:
-                logger.warning(
-                    f"Multiple .model3.json files found in {model_dir_abs}. "
-                    f"Using the first one: {model_files[0]}"
-                )
-
-            # Construct the relative URL for the found model file
-            # The URL should be relative to the Flask static folder
-            relative_path_to_model = os.path.relpath(model_files[0], static_dir)
-            resolved_url = f"/static/models/{relative_path_to_model.replace(os.sep, '/')}"
-            logger.info(f"Resolved Live2D model URL: {resolved_url}")
+        if live2d_model_config_path:
+            # The path from .env is relative to src/web/static
+            # We need to construct a URL that Flask's static file server can handle.
+            # Flask serves files from the 'static' folder at the '/static/' URL prefix.
+            # So, if LIVE2D_MODEL_CONFIG_PATH is 'models/miara_pro_en/runtime/miara_pro_t03.model3.json',
+            # the URL will be '/static/models/miara_pro_en/runtime/miara_pro_t03.model3.json'.
+            resolved_url = f"/static/{live2d_model_config_path.replace(os.sep, '/')}"
+            logger.info(f"Resolved Live2D model URL from ENV: {resolved_url}")
             return resolved_url
-        elif model_url_from_settings:
-            logger.info(f"Using Live2D model URL from settings: {model_url_from_settings}")
-            return model_url_from_settings
         else:
-            logger.warning("No Live2D model folder or URL specified in settings.")
+            logger.warning("LIVE2D_MODEL_CONFIG_PATH environment variable not set. Live2D model will not be loaded.")
             return None
 
     def _setup_routes(self):
