@@ -52,7 +52,7 @@ class ServiceManager:
 
         # Flask Web Server
         self.logger.info("Starting Flask Web Server...")
-        from web.app import Live2DFlaskApp
+        from src.web.app import Live2DFlaskApp
 
         flask_app = Live2DFlaskApp()
         flask_thread = threading.Thread(
@@ -305,15 +305,6 @@ async def validate_system_dependencies(config):
     # Validate memory configuration
     if config.memory.mem0_api_key:
         logger.info("Mem0 memory system configured")
-        try:
-            headers = {"Authorization": f"Bearer {config.memory.mem0_api_key}"}
-            response = requests.get(
-                f"{config.memory.mem0_host}/health", headers=headers, timeout=5
-            )
-            response.raise_for_status()
-            logger.info("Mem0 connectivity check successful")
-        except requests.exceptions.RequestException as e:
-            raise ConfigurationError(f"Mem0 connectivity check failed: {e}")
     else:
         logger.warning("No Mem0 API key provided. Memory will be session-only.")
 

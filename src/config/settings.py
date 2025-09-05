@@ -51,6 +51,7 @@ class MemoryConfig:
     """Memory management configuration."""
 
     mem0_api_key: str = ""
+    mem0_host: str = "https://api.mem0.ai"
     mem0_collection: str = "anime_character"
     memory_history_limit: int = 20
 
@@ -180,6 +181,7 @@ class ConfigManager:
             # Memory configuration
             memory_config = MemoryConfig(
                 mem0_api_key=os.getenv("MEM0_API_KEY", ""),
+                mem0_host=os.getenv("MEM0_HOST", "https://api.mem0.ai"),
                 mem0_collection=os.getenv("MEM0_COLLECTION", "anime_character"),
                 memory_history_limit=int(os.getenv("MEMORY_HISTORY_LIMIT", "20")),
             )
