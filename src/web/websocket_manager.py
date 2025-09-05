@@ -112,7 +112,7 @@ class WebSocketAnimationManager:
 
             # Create server with more permissive settings
             self.server = await websockets.serve(
-                lambda websocket, path: self._handle_client_connection(websocket, path),
+                self._handle_client_connection,
                 self.host,
                 self.port,
                 ping_interval=20,
@@ -120,7 +120,6 @@ class WebSocketAnimationManager:
                 max_size=10 * 1024 * 1024,  # 10MB max message size
                 compression=None,  # Disable compression for better compatibility
                 extensions=[],  # No extensions for better compatibility
-                logger=self.logger
             )
 
             self.is_running = True
@@ -178,14 +177,13 @@ class WebSocketAnimationManager:
             self.logger.error(f"Error stopping WebSocket server: {e}")
 
     async def _handle_client_connection(
-        self, websocket: WebSocketServerProtocol, path: str
+        self, websocket: ServerProtocol
     ) -> None:
         """
         Handle new client WebSocket connection.
 
         Args:
             websocket: WebSocket connection
-            path: Connection path
         """
         client_id = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}_{int(time.time())}"
 
