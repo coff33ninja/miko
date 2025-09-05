@@ -5,6 +5,16 @@
  * and animation control for the anime AI character system.
  */
 
+const loadScript = async (src) => {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+};
+
 class Live2DIntegration {
     constructor(canvasId, modelUrl) {
         this.canvas = document.getElementById(canvasId);
@@ -37,6 +47,12 @@ class Live2DIntegration {
     async initialize() {
         try {
             console.log('Initializing Live2D integration...');
+
+            // Dynamically load scripts in order
+            await loadScript('/static/js/pixi.min.js');
+            await loadScript('/static/js/live2dcubismcore.min.js');
+            await loadScript('/static/js/live2dcubismframework.js');
+            await loadScript('/static/js/live2dcubismpixi.js');
             
             // Initialize Live2D framework
             await this.initializeLive2DFramework();
@@ -207,18 +223,6 @@ class Live2DIntegration {
 
         // Update and render the Pixi.js application
         this.app.render();
-    }
-    
-    getExpressionColor(expression) {
-        const colors = {
-            'happy': '#FFD700',
-            'sad': '#87CEEB',
-            'angry': '#FF6B6B',
-            'surprised': '#FFA500',
-            'neutral': '#DDD',
-            'speak': '#90EE90'
-        };
-        return colors[expression] || '#DDD';
     }
     
     getExpressionColor(expression) {

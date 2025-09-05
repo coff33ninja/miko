@@ -511,7 +511,10 @@ class Live2DFlaskApp:
                     )
 
                     # Set token expiration (1 hour)
-                    token.with_ttl(timedelta(hours=1))
+                                        # Set token expiration (5 minutes)
+                    token.with_ttl(timedelta(minutes=5))
+
+                    jwt_token = token.to_jwt()
 
                     jwt_token = token.to_jwt()
 
@@ -533,7 +536,7 @@ class Live2DFlaskApp:
                         "room": room_name,
                         "participant": participant_name,
                         "url": self.settings.livekit.url,
-                        "expires_in": 3600,  # 1 hour in seconds
+                        "expires_in": 300,  # 5 minutes in seconds
                     }
                 )
 
