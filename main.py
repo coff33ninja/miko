@@ -13,12 +13,17 @@ from pathlib import Path
 from typing import Optional, List
 import threading
 import time
+import requests
+
 
 # Add src to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from config.settings import load_config, ConfigurationError
 from config.logging_config import setup_application_logging
+from agent.livekit_agent import AnimeAIAgent, main as livekit_agent_main
+from memory.memory_manager import MemoryManager
+from ai.provider_factory import ProviderFactory
 
 
 class ServiceManager:
@@ -42,13 +47,13 @@ class ServiceManager:
         
         # Initialize and start services
         
-        # AI Provider
-        self.logger.info("Starting AI Provider...")
-        # TODO: Initialize AI provider
-        
         # Memory Manager
         self.logger.info("Starting Memory Manager...")
-        # TODO: Initialize Memory Manager
+        self.memory_manager = MemoryManager(config.memory)
+        await self.memory_manager.initialize()
+
+        # AI Provider (initialized implicitly by LiveKit Agent's LLM)
+        self.logger.info("AI Provider will be initialized by LiveKit Agent's LLM.")
         
         # Flask Web Server
         self.logger.info("Starting Flask Web Server...")
@@ -65,9 +70,7 @@ class ServiceManager:
         )
         flask_thread.start()
         
-        # LiveKit Agent
-        self.logger.info("Starting LiveKit Agent...")
-        # TODO: Initialize LiveKit Agent
+        
         
         self.logger.info("All services started successfully!")
     
@@ -266,7 +269,12 @@ async def validate_system_dependencies(config):
     # Validate AI provider configuration
     if config.ai.use_ollama:
         logger.info("Ollama selected as AI provider")
-        # TODO: In task 2, we'll add actual Ollama connectivity check
+        try:
+            response = requests.get(f"{config.ai.ollama_host}/api/version", timeout=5)
+            response.raise_for_status()
+            logger.info("Ollama connectivity check successful")
+        except requests.exceptions.RequestException as e:
+            raise ConfigurationError(f"Ollama connectivity check failed: {e}")
     else:
         if not config.ai.gemini_api_keys:
             raise ConfigurationError("Gemini selected but no API keys provided")
@@ -275,7 +283,13 @@ async def validate_system_dependencies(config):
     # Validate memory configuration
     if config.memory.mem0_api_key:
         logger.info("Mem0 memory system configured")
-        # TODO: In task 3, we'll add actual Mem0 connectivity check
+        try:
+            headers = {"Authorization": f"Bearer {config.memory.mem0_api_key}"}
+            response = requests.get(f"{config.memory.mem0_host}/health", headers=headers, timeout=5)
+            response.raise_for_status()
+            logger.info("Mem0 connectivity check successful")
+        except requests.exceptions.RequestException as e:
+            raise ConfigurationError(f"Mem0 connectivity check failed: {e}")
     else:
         logger.warning("No Mem0 API key provided. Memory will be session-only.")
     

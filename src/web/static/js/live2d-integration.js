@@ -406,6 +406,37 @@ class Live2DIntegration {
         this.live2dModel.parameters.byName('ParamMouthForm').value = Math.sin(time) * 0.2 * mouthOpen;
     }
     
+    drawPlaceholder() {
+        if (!this.app) return;
+
+        // Clear the canvas
+        this.app.renderer.clear();
+
+        // Optionally, draw a simple message or shape
+        const graphics = new PIXI.Graphics();
+        graphics.beginFill(0xAAAAAA);
+        graphics.drawRect(0, 0, this.canvas.width, this.canvas.height);
+        graphics.endFill();
+
+        const style = new PIXI.TextStyle({
+            fill: 0xFFFFFF,
+            fontSize: 24,
+            align: 'center'
+        });
+        const message = new PIXI.Text('Live2D Model Not Loaded', style);
+        message.anchor.set(0.5);
+        message.x = this.canvas.width / 2;
+        message.y = this.canvas.height / 2;
+
+        this.app.stage.addChild(graphics);
+        this.app.stage.addChild(message);
+        this.app.render();
+
+        // Remove them after rendering to keep the stage clean for when the model loads
+        this.app.stage.removeChild(graphics);
+        this.app.stage.removeChild(message);
+    }
+    
     /**
      * Map AI sentiment to animation expression
      */

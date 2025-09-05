@@ -47,11 +47,7 @@ class EnhancedVoiceAssistant:
         # Set up event handlers
         self._setup_event_handlers()
 
-    def _setup_event_handlers(self) -> None:
-        """Set up event handlers for the voice agent."""
-        # Note: The new VoiceAgent API may have different event handling
-        # This is a placeholder for future event handler setup
-        pass
+    
 
     async def _handle_user_speech(
         self, user_msg: str, participant: rtc.RemoteParticipant
