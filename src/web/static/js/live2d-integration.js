@@ -48,11 +48,8 @@ class Live2DIntegration {
         try {
             console.log('Initializing Live2D integration...');
 
-            // Dynamically load scripts in order
-            await loadScript('/static/js/pixi.min.js');
-            await loadScript('/static/js/live2dcubismcore.min.js');
-            await loadScript('/static/js/live2dcubismframework.js');
-            await loadScript('/static/js/live2dcubismpixi.js');
+            // Scripts are now loaded via CDN in index.html
+            // No dynamic loading needed here.
             
             // Initialize Live2D framework
             await this.initializeLive2DFramework();
