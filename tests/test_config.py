@@ -22,25 +22,9 @@ class TestConfigManager:
         """Clear environment variables before each test."""
         # Clear all relevant env vars to ensure clean test state
         env_vars_to_clear = [
-            "LIVEKIT_URL",
-            "LIVEKIT_API_KEY",
-            "LIVEKIT_API_SECRET",
-            "LIVEKIT_ROOM_NAME",
-            "USE_OLLAMA",
-            "OLLAMA_MODEL",
-            "OLLAMA_HOST",
-            "GEMINI_API_KEYS",
-            "GEMINI_CURRENT_KEY_INDEX",
-            "PERSONALITY_PROMPT",
-            "MEM0_API_KEY",
-            "MEM0_COLLECTION",
-            "MEMORY_HISTORY_LIMIT",
-            "LIVE2D_MODEL_URL",
-            "LIVE2D_TEXTURES_URL",
-            "TTS_PROVIDER",
-            "STT_PROVIDER",
             "DEBUG",
             "LOG_LEVEL",
+            "LIVE2D_MODEL_FOLDER", # Added for Live2D model folder testing
         ]
         for var in env_vars_to_clear:
             if var in os.environ:
@@ -73,6 +57,64 @@ LIVEKIT_API_SECRET=test_secret
             assert config.ai.use_ollama is True
             assert config.ai.ollama_model == "llama3"
 
+        finally:
+            os.unlink(env_file)
+
+    def test_live2d_model_configuration(self):
+        """Test Live2D model configuration from environment variables."""
+        # Scenario 1: LIVE2D_MODEL_FOLDER is set
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+            f.write(
+                """
+LIVEKIT_URL=wss://test.livekit.cloud
+LIVEKIT_API_KEY=test_key
+LIVEKIT_API_SECRET=test_secret
+LIVE2D_MODEL_FOLDER=my_custom_model
+"""
+            )
+            env_file = f.name
+        try:
+            config_manager = ConfigManager(env_file)
+            config = config_manager.load_config()
+            assert config.live2d.model_folder == "my_custom_model"
+            assert config.live2d.model_url is None  # Should be None if folder is set
+        finally:
+            os.unlink(env_file)
+
+        # Scenario 2: LIVE2D_MODEL_URL is set (and folder is not)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+            f.write(
+                """
+LIVEKIT_URL=wss://test.livekit.cloud
+LIVEKIT_API_KEY=test_key
+LIVEKIT_API_SECRET=test_secret
+LIVE2D_MODEL_URL=/static/models/my_model.model3.json
+"""
+            )
+            env_file = f.name
+        try:
+            config_manager = ConfigManager(env_file)
+            config = config_manager.load_config()
+            assert config.live2d.model_folder is None
+            assert config.live2d.model_url == "/static/models/my_model.model3.json"
+        finally:
+            os.unlink(env_file)
+
+        # Scenario 3: Neither LIVE2D_MODEL_FOLDER nor LIVE2D_MODEL_URL is set
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+            f.write(
+                """
+LIVEKIT_URL=wss://test.livekit.cloud
+LIVEKIT_API_KEY=test_key
+LIVEKIT_API_SECRET=test_secret
+"""
+            )
+            env_file = f.name
+        try:
+            config_manager = ConfigManager(env_file)
+            config = config_manager.load_config()
+            assert config.live2d.model_folder is None
+            assert config.live2d.model_url is None
         finally:
             os.unlink(env_file)
 
@@ -204,3 +246,4 @@ PERSONALITY_PROMPT=You are a cheerful anime idol named Aiko!
 
 if __name__ == "__main__":
     pytest.main([__file__])
+        
