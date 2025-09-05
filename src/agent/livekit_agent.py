@@ -168,7 +168,7 @@ class AnimeAILLM(LLM):
             # --------------------------------------------------------------
             # 4️⃣  Convert LiveKit ChatMessage objects to the provider‑agnostic format
             # --------------------------------------------------------------
-            from ..ai.base_provider import (
+            from ai.base_provider import (
                 Message,
             )  # thin wrapper used by ProviderFactory
 
