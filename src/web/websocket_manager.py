@@ -14,7 +14,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 
 import websockets
-from websockets.server import WebSocketServerProtocol
+from websockets.server import ServerProtocol
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
 
@@ -78,7 +78,7 @@ class WebSocketAnimationManager:
         self.logger = logging.getLogger(__name__)
 
         # Connection management
-        self.clients: Dict[str, WebSocketServerProtocol] = {}
+        self.clients: Dict[str, ServerProtocol] = {}
         self.server: Optional[websockets.WebSocketServer] = None
 
         # Animation state
